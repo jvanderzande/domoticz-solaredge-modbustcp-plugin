@@ -51,7 +51,7 @@ SINGLE_PHASE_INVERTER = [
     [InverterUnit.POWER_DC,           "DC Power",           0xF8, 0x01,    0x00,       {},                  "power_dc",           "power_dc_scale",       "{}",     None,        None,         None,        None,                                 Average() ],
     [InverterUnit.TEMPERATURE,        "Temperature",        0xF3, 0x05,    0x00,       {},                  "temperature",        "temperature_scale",    "{:.2f}", None,        None,         None,        None,                                 Maximum() ],
     [InverterUnit.RRCR_STATE,         "RRCR State",         0xF3, 0x13,    0x00,       {},                  "rrcr_state",         None,                   "{}",     None,        None,         None,        None,                                 None      ],
-    [InverterUnit.ACTIVE_POWER_LIMIT, "Active Power Limit", 0xF3, 0x06,    0x00,       {},                  "active_power_limit", None,                   "{:.2f}", None,        None,         None,        None,                                 Average() ],
+    [InverterUnit.ACTIVE_POWER_LIMIT, "Active Power Limit", 0xF4, 0x49,    0x07,       {},                  "active_power_limit", None,                   "{:.0f}", None,        None,         None,        None,                                 None      ],
     [InverterUnit.COSPHI,             "cos-phi",            0xF3, 0x13,    0x00,       {},                  "cosphi",             None,                   "{}",     None,        None,         None,        None,                                 None      ]
 
 ]

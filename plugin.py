@@ -318,17 +318,21 @@ class BasePlugin:
                         DomoLog(LogLevels.MAX, "-> no prepend")
                         sValue = unit[Column.FORMAT].format(value)
 
-                    DomoLog(LogLevels.EXTRA, "sValue = {}".format(sValue))
-
                     # Only store the value in Domoticz when it has changed.
                     # TODO:
                     #   We should not store certain values when the inverter is sleeping.
                     #   That results in a strange graph; it would be better just to skip it then.
+                    nValue=0
+                    if (unit[Column.ID + offset] == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
+                        # sValue = str(int(sValue))
+                        if value > 0:
+                           nValue = 2
 
-                    if sValue != Devices[unit[Column.ID] + offset].sValue:
-                        Devices[unit[Column.ID] + offset].Update(nValue=0, sValue=str(sValue), TimedOut=0)
+                        DomoLog(LogLevels.NORMAL, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+
+                    if nValue != Devices[unit[Column.ID + offset]].nValue or (nValue == Devices[unit[Column.ID + offset]].nValue and sValue != Devices[unit[Column.ID + offset]].sValue):
+                        Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
                         updated += 1
-
                     device_count += 1
 
                 else:
@@ -388,11 +392,19 @@ class BasePlugin:
 
         return value
 
+    def onCommand(self, iUnit, Command, Level, Hue):
+        # Set PowerLevel when the dimmer level is changed in Domoticz
+        DomoLog(LogLevels.VERBOSE,"onCommand called for Unit " + str(iUnit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
+        if (iUnit == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
+            if Command == "Off":
+                Level = 0
+            DomoLog(LogLevels.DSTATUS, f"Send active_power_limit Level {Level} to SolarEdge")
+            self.inverter.write("active_power_limit", Level)
 
     #
     # Connect to the inverter and initialize the lookup tables.
     #
-    
+
     def connectToInverter(self):
 
         DomoLog(LogLevels.EXTRA, "Entered connectToInverter()")
@@ -402,7 +414,7 @@ class BasePlugin:
         if (self.inverter == None):
 
             # Let's go
-            DomoLog(LogLevels.MAX, 
+            DomoLog(LogLevels.MAX,
                 "onStart Address: {} Port: {} Device Address: {}".format(
                     self.inverter_address,
                     self.inverter_port,
@@ -606,7 +618,7 @@ class BasePlugin:
     # Go through the table and update matching devices
     # with the new values.
     #
-    
+
     def addUpdateDevices(self, device_name):
 
         DomoLog(LogLevels.EXTRA, "Entered addUpdateDevices()")
@@ -683,3 +695,7 @@ def onStart():
 def onHeartbeat():
     global _plugin
     _plugin.onHeartbeat()
+
+def onCommand(Unit, Command, Level, Hue):
+    global _plugin
+    _plugin.onCommand(Unit, Command, Level, Hue)
