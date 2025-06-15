@@ -398,7 +398,7 @@ class BasePlugin:
         if (iUnit == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
             if Command == "Off":
                 Level = 0
-            DomoLog(LogLevels.DSTATUS, f"Send active_power_limit Level {Level} to SolarEdge")
+            DomoLog(LogLevels.NORMAL, f"Send active_power_limit Level {Level} to SolarEdge")
             self.inverter.write("active_power_limit", Level)
 
     #
