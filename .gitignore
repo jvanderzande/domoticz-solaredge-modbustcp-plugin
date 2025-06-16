@@ -128,3 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 screenshots/Thumbs.db
+plugin_sync3.py
+plugin_sync2.py
+plugin_sync.py
