@@ -9,7 +9,7 @@
 #
 
 """
-<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen" version="2.0.4" externallink="https://github.com/addiejanssen/domoticz-solaredge-modbustcp-plugin">
+<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.4.2" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
     <params>
         <param field="Address" label="Inverter IP Address" width="150px" required="true" />
         <param field="Port" label="Inverter Port Number" width="150px" required="true" default="502" />
@@ -349,14 +349,12 @@ class BasePlugin:
                         if value > 0:
                            nValue = 2
 
-                    DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+                    DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {Column.ID}  offset:{offset}")
 
-                    if nValue != Devices[unit[Column.ID + offset]].nValue or (nValue == Devices[unit[Column.ID + offset]].nValue and sValue != Devices[unit[Column.ID + offset]].sValue):
-                        DomoLog(LogLevels.EXTRA, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+                    if nValue != Devices[unit[Column.ID] + offset].nValue or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
+                        DomoLog(LogLevels.DEBUG, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
                         Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
                         updated += 1
-                    # else:
-                    #     DomoLog(LogLevels.EXTRA, f"!NO update device: {unit[Column.NAME]}  nValue:{Devices[unit[Column.ID + offset]].nValue} sValue:{Devices[unit[Column.ID + offset]].sValue}")
 
                     device_count += 1
 
