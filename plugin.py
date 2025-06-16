@@ -71,7 +71,7 @@ from enum import IntEnum, unique
 from pymodbus.exceptions import ConnectionException
 
 import urllib.request
-from importlib.metadata import version, PackageNotFoundError
+
 #
 # The plugin is using a few tables to setup Domoticz and to process the feedback from the inverter.
 # The Column class is used to easily identify the columns in those tables.
@@ -161,15 +161,20 @@ class BasePlugin:
     def onStart(self):
         DomoLog(LogLevels.EXTRA, "Entered onStart()")
 
+        try:
+            from importlib.metadata import version, PackageNotFoundError
+        except ImportError:
+            DomoLog(LogLevels.NORMAL,"on older python so no importlib")
+
         solaredge_version = "Git"
         try:
             solaredge_version = version("solaredge_modbus")
-        except PackageNotFoundError:
+        except Exception as e:
             solaredge_version = "unknown"
 
         try:
             pymodbus_version = version("pymodbus")
-        except PackageNotFoundError:
+        except Exception as e:
             pymodbus_version = "unknown"
 
         DomoLog(LogLevels.DSTATUS,f"solaredge_modbus version: {solaredge_version}")
