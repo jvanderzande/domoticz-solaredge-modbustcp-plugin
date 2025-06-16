@@ -323,16 +323,18 @@ class BasePlugin:
                     #   We should not store certain values when the inverter is sleeping.
                     #   That results in a strange graph; it would be better just to skip it then.
                     nValue=0
-                    if (unit[Column.ID + offset] == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
+                    if (unit[Column.ID] == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
                         # sValue = str(int(sValue))
                         if value > 0:
                            nValue = 2
 
                         DomoLog(LogLevels.NORMAL, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
 
-                    if nValue != Devices[unit[Column.ID + offset]].nValue or (nValue == Devices[unit[Column.ID + offset]].nValue and sValue != Devices[unit[Column.ID + offset]].sValue):
+                    if nValue != Devices[unit[Column.ID] + offset].nValue or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
+                        DomoLog(LogLevels.DEBUG, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
                         Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
                         updated += 1
+
                     device_count += 1
 
                 else:
