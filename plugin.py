@@ -534,11 +534,20 @@ class BasePlugin:
                         all_meters = self.inverter.meters()
                         if all_meters:
                             DomoLog(LogLevels.NORMAL, "Found at least one meter")
+                            munit = 0
+                            mfunits = 0
 
                             for meter, params in all_meters.items():
                                 meter_values = params.read_all()
+                                munit += 1
 
                                 if meter_values:
+                                    if meter_values["c_version"] == "False":
+                                        DomoLog(LogLevels.VERBOSE, f"Meters unit {meter} not connected.")
+                                        continue
+
+                                    mfunits += 1
+
                                     DomoLog(LogLevels.NORMAL, "Inverter returned meter information")
 
                                     to_log = meter_values
@@ -572,11 +581,17 @@ class BasePlugin:
                                     self.addUpdateDevices(meter)
                                 else:
                                     DomoLog(LogLevels.NORMAL, "Found {}. BUT... inverter didn't return information".format(meter))
+
+                            if mfunits == 0:
+                                DomoLog(LogLevels.NORMAL, "No meters found")
+
                         else:
                             DomoLog(LogLevels.NORMAL, "No meters found")
+
                         # End scan for meters
 
                         # Scan for batteries
+
                         DomoLog(LogLevels.NORMAL, "Scanning for batteries")
 
                         device_offset = max(inverters.InverterUnit) + (3 * max(meters.MeterUnit))
@@ -589,8 +604,8 @@ class BasePlugin:
                                 battery_values = params.read_all()
                                 bunit += 1
                                 if battery_values:
-                                    if battery_values["c_model"] == "False":
-                                        DomoLog(LogLevels.VERBOSE, f"Battery unit {bunit} not connected.")
+                                    if battery_values["c_version"] == "False":
+                                        DomoLog(LogLevels.VERBOSE, f"Battery unit {battery} not connected.")
                                         continue
 
                                     bfunits += 1
