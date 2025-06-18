@@ -31,12 +31,14 @@ class InverterUnit(IntEnum):
     RRCR_STATE          = 23
     ACTIVE_POWER_LIMIT  = 24
     COSPHI              = 25
+    STORAGECONTROL      = 26
+    RCCMDMODE           = 27
 
 SINGLE_PHASE_INVERTER = [
 #   ID,                               NAME,                 TYPE, SUBTYPE, SWITCHTYPE, OPTIONS,             MODBUSNAME,           MODBUSSCALE,            FORMAT,   PREPEND_ROW, PREPEND_MATH, APPEND_MATH, LOOKUP,                               MATH
     [InverterUnit.STATUS,             "Status",             0xF3, 0x13,    0x00,       {},                  "status",             None,                   "{}",     None,        None,         None,        solaredge_modbus.INVERTER_STATUS_MAP, None      ],
     [InverterUnit.VENDOR_STATUS,      "Vendor Status",      0xF3, 0x13,    0x00,       {},                  "vendor_status",      None,                   "{}",     None,        None,         None,        None,                                 None      ],
-    [InverterUnit.CURRENT,            "Current",            0xF3, 0x17,    0x00,       {},                  "current",            "current_scale",        "{:.2f}", None,        None,         None,        None,                                 Average() ],
+    # [InverterUnit.CURRENT,            "Current",            0xF3, 0x17,    0x00,       {},                  "current",            "current_scale",        "{:.2f}", None,        None,         None,        None,                                 Average() ],
     [InverterUnit.L1_CURRENT,         "L1 Current",         0xF3, 0x17,    0x00,       {},                  "l1_current",         "current_scale",        "{:.2f}", None,        None,         None,        None,                                 Average() ],
     [InverterUnit.L1_VOLTAGE,         "L1 Voltage",         0xF3, 0x08,    0x00,       {},                  "l1_voltage",         "voltage_scale",        "{:.2f}", None,        None,         None,        None,                                 Average() ],
     [InverterUnit.L1N_VOLTAGE,        "L1-N Voltage",       0xF3, 0x08,    0x00,       {},                  "l1n_voltage",        "voltage_scale",        "{:.2f}", None,        None,         None,        None,                                 Average() ],
@@ -45,15 +47,16 @@ SINGLE_PHASE_INVERTER = [
     [InverterUnit.POWER_APPARENT,     "Power (Apparent)",   0xF3, 0x1F,    0x00,       {"Custom": "1;VA" }, "power_apparent",     "power_apparent_scale", "{}",     None,        None,         None,        None,                                 Average() ],
     [InverterUnit.POWER_REACTIVE,     "Power (Reactive)",   0xF3, 0x1F,    0x00,       {"Custom": "1;VAr"}, "power_reactive",     "power_reactive_scale", "{}",     None,        None,         None,        None,                                 Average() ],
     [InverterUnit.POWER_FACTOR,       "Power Factor",       0xF3, 0x06,    0x00,       {},                  "power_factor",       "power_factor_scale",   "{:.2f}", None,        None,         None,        None,                                 Average() ],
-    [InverterUnit.ENERGY_TOTAL,       "Total Energy",       0xF3, 0x1D,    0x04,       {},                  "energy_total",       "energy_total_scale",   "{};{}",  6,           None,         None,        None,                                 None      ],
+    [InverterUnit.ENERGY_TOTAL,       "Total Energy",       0xF3, 0x1D,    0x04,       {},                  "energy_total",       "energy_total_scale",   "{};{}",  5,           None,         None,        None,                                 None      ],
     [InverterUnit.CURRENT_DC,         "DC Current",         0xF3, 0x17,    0x00,       {},                  "current_dc",         "current_dc_scale",     "{:.2f}", None,        None,         None,        None,                                 Average() ],
     [InverterUnit.VOLTAGE_DC,         "DC Voltage",         0xF3, 0x08,    0x00,       {},                  "voltage_dc",         "voltage_dc_scale",     "{:.2f}", None,        None,         None,        None,                                 Average() ],
     [InverterUnit.POWER_DC,           "DC Power",           0xF8, 0x01,    0x00,       {},                  "power_dc",           "power_dc_scale",       "{}",     None,        None,         None,        None,                                 Average() ],
     [InverterUnit.TEMPERATURE,        "Temperature",        0xF3, 0x05,    0x00,       {},                  "temperature",        "temperature_scale",    "{:.2f}", None,        None,         None,        None,                                 Maximum() ],
     [InverterUnit.RRCR_STATE,         "RRCR State",         0xF3, 0x13,    0x00,       {},                  "rrcr_state",         None,                   "{}",     None,        None,         None,        None,                                 None      ],
     [InverterUnit.ACTIVE_POWER_LIMIT, "Active Power Limit", 0xF4, 0x49,    0x07,       {},                  "active_power_limit", None,                   "{:.0f}", None,        None,         None,        None,                                 None      ],
-    [InverterUnit.COSPHI,             "cos-phi",            0xF3, 0x13,    0x00,       {},                  "cosphi",             None,                   "{}",     None,        None,         None,        None,                                 None      ]
-
+    [InverterUnit.COSPHI,             "cos-phi",            0xF3, 0x13,    0x00,       {},                  "cosphi",             None,                   "{}",     None,        None,         None,        None,                                 None      ],
+    [InverterUnit.STORAGECONTROL,"Storage Control Mode",0xF4,0x49,0x12,{"LevelActions": "||||"  ,"LevelNames": "Disabled|Maximize Self Consumption|Time of Use|Backup Only|Remote Control","LevelOffHidden": "false","SelectorStyle": "1"}                                                                        , "storage_control_mode",None,"{}", None,None,None,None,None],
+    [InverterUnit.RCCMDMODE,     "Remote Control Mode", 0xF4,0x49,0x12,{"LevelActions": "||||||","LevelNames": "Off|Charge from excess PV power only|Charge from PV first|Charge from PV and AC|Maximize export|Discharge to match load|Maximize self consumption","LevelOffHidden": "false","SelectorStyle": "1"}, "rc_cmd_mode"         ,None,"{}", None,None,None,None,None]
 ]
 
 THREE_PHASE_INVERTER = [
@@ -81,10 +84,11 @@ THREE_PHASE_INVERTER = [
     [InverterUnit.POWER_DC,           "DC Power",           0xF8, 0x01,    0x00,       {},                  "power_dc",           "power_dc_scale",       "{}",     None,        None,         None,        None,                                 Average() ],
     [InverterUnit.TEMPERATURE,        "Temperature",        0xF3, 0x05,    0x00,       {},                  "temperature",        "temperature_scale",    "{:.2f}", None,        None,         None,        None,                                 Maximum() ],
     [InverterUnit.RRCR_STATE,         "RRCR State",         0xF3, 0x13,    0x00,       {},                  "rrcr_state",         None,                   "{}",     None,        None,         None,        None,                                 None      ],
-    [InverterUnit.ACTIVE_POWER_LIMIT, "Active Power Limit", 0xF4, 0x49,    0x07,       {},                  "active_power_limit", None,                   "{:.0f}", None,        None,         None,        None,                                 None      ],
-    [InverterUnit.COSPHI,             "cos-phi",            0xF3, 0x13,    0x00,       {},                  "cosphi",             None,                   "{}",     None,        None,         None,        None,                                 None      ]
+    [InverterUnit.ACTIVE_POWER_LIMIT, "Active Power Limit", 0xF4, 0x49,    0x07,       {},                  "active_power_limit", None,                   "{:.0f}", None,        None,         None,        None,                                 Average() ],
+    [InverterUnit.COSPHI,             "cos-phi",            0xF3, 0x13,    0x00,       {},                  "cosphi",             None,                   "{}",     None,        None,         None,        None,                                 None      ],
+    [InverterUnit.STORAGECONTROL,"Storage Control Mode",0xF4,0x49,0x12,{"LevelActions": "||||","LevelNames": "Disabled|Maximize Self Consumption|Time of Use|Backup Only|Remote Control","LevelOffHidden": "false","SelectorStyle": "1"}, "storage_control_mode",None,"{}", None,None,None,None,None],
+    [InverterUnit.RCCMDMODE,     "Remote Control Mode", 0xF4,0x49,0x12,{"LevelActions": "||||||","LevelNames": "Off|Charge from excess PV power only|Charge from PV first|Charge from PV and AC|Maximize export|Discharge to match load|Maximize self consumption","LevelOffHidden": "false","SelectorStyle": "1"}, "rc_cmd_mode",None,"{}", None,None,None,None,None]
 ]
-
 #
 # This lists all implemented options, but an inverter may not return all of them.
 # The following addtional meter type has been defined:

@@ -350,6 +350,18 @@ class BasePlugin:
                         if value > 0:
                            nValue = 2
 
+                    # Set Selector switch level to 0;10;20;30 ....
+                    if (unit[Column.ID] == inverters.InverterUnit.STORAGECONTROL ):
+                        Level = Level * 10
+                        if value > 0:
+                           nValue = 2
+
+                    # Set Selector switch level to 0;10;20;30 ....
+                    if (unit[Column.ID] == inverters.InverterUnit.RCCMDMODE ):
+                        Level = Level * 10
+                        if value > 0:
+                           nValue = 2
+
                     DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {Column.ID}  offset:{offset}")
 
                     # Force update when device isn't updated for 12 hours
@@ -431,6 +443,22 @@ class BasePlugin:
                 Level = 0
             DomoLog(LogLevels.DSTATUS, f"Send active_power_limit Level {Level} to SolarEdge")
             self.inverter.write("active_power_limit", Level)
+
+        # Use Selector switch level 0;10;20;30 and change that to 0;1;2;3
+        if (iUnit == inverters.InverterUnit.STORAGECONTROL ):
+            Level = Level/10
+            if Command == "Off":
+                Level = 0
+            DomoLog(LogLevels.DSTATUS, f"Send storage_control_mode Level {Level} to SolarEdge")
+            self.inverter.write("storage_control_mode", Level)
+
+        # Use Selector switch level 0;10;20;30 and change that to 0;1;2;3
+        if (iUnit == inverters.InverterUnit.RCCMDMODE ):
+            Level = Level/10
+            if Command == "Off":
+                Level = 0
+            DomoLog(LogLevels.DSTATUS, f"Send rc_cmd_mode Level {Level} to SolarEdge")
+            self.inverter.write("rc_cmd_mode", Level)
 
     #
     # Connect to the inverter and initialize the lookup tables.
