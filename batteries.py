@@ -34,65 +34,6 @@ class BatteryUnit(IntEnum):
 # Let's wait till somebody can help out sharing the actual values returned.
 #
 
-# Battery1 values: {
-#     "c_manufacturer": "\u0002",
-#     "c_model": "False",
-#     "c_version": "False",
-#     "c_deviceaddress": 15,
-#     "c_sunspec_did": 0,
-#     "rated_energy": -3.4028234663852886e+38,
-#     "maximum_charge_continuous_power": -3.4028234663852886e+38,
-#     "maximum_discharge_continuous_power": -3.4028234663852886e+38,
-#     "maximum_charge_peak_power": -3.4028234663852886e+38,
-#     "maximum_discharge_peak_power": -3.4028234663852886e+38,
-#     "average_temperature": -3.4028234663852886e+38,
-#     "maximum_temperature": 0.0,
-#     "instantaneous_voltage": -3.4028234663852886e+38,
-#     "instantaneous_current": -3.4028234663852886e+38,
-#     "instantaneous_power": 0.0,
-#     "lifetime_export_energy_counter": 0,
-#     "lifetime_import_energy_counter": 0,
-#     "maximum_energy": -3.4028234663852886e+38,
-#     "available_energy": -3.4028234663852886e+38,
-#     "soh": -3.4028234663852886e+38,
-#     "soe": -3.4028234663852886e+38,
-#     "status": 7,
-#     "status_internal": 0,
-#     "event_log": 0,
-#     "event_log_internal": 0
-# }
-
-# 2025-06-12 22:22:04.790  Solaredge direct: [D] battery values : {
-#     "Battery1": {
-#         "c_manufacturer": "SolarEdge",
-#         "c_model": "SolarEdge Home Battery 48V - 3",
-#         "c_version": "48V DCDC 2.3.3",
-#         "c_serialnumber": "B1C2D3E4",
-#         "c_deviceaddress": 112,
-#         "c_sunspec_did": 0,
-#         "rated_energy": 13800.0,
-#         "maximum_charge_continuous_power": 5000.0,
-#         "maximum_discharge_continuous_power": 5000.0,
-#         "maximum_charge_peak_power": 8000.0,
-#         "maximum_discharge_peak_power": 12800.0,
-#         "average_temperature": 27.600000381469727,
-#         "maximum_temperature": 0.0,
-#         "instantaneous_voltage": 820.6934814453125,
-#         "instantaneous_current": 0.41852644085884094,
-#         "instantaneous_power": -282.0,
-#         "lifetime_export_energy_counter": 68,
-#         "lifetime_import_energy_counter": 0,
-#         "maximum_energy": 13800.0,
-#         "available_energy": 13685.7607421875,
-#         "soh": 99.0,
-#         "soe": 93.33333587646484,
-#         "status": 4,
-#         "status_internal": 3,
-#         "event_log": 0,
-#         "event_log_internal": 0
-#     }
-# }
-
 OTHER_BATTERY = [
 #   ID,                                    NAME,                                 TYPE, SUBTYPE, SWITCHTYPE, OPTIONS, MODBUSNAME,                           MODBUSSCALE, FORMAT,    PREPEND_ROW, PREPEND_MATH, APPEND_MATH, LOOKUP,                              MATH
     [BatteryUnit.STATUS,                   "Status",                             0xF3, 0x13,    0x00,       {},      "status",                             None,        "{}",      None,        None,         None,        solaredge_modbus.BATTERY_STATUS_MAP, None      ],
