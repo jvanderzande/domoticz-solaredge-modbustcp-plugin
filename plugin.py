@@ -67,6 +67,7 @@ import batteries
 from helpers import DomoLog, LogLevels, SetLogLevel, UpdatePeriod
 
 from datetime import datetime, timedelta
+import time
 from enum import IntEnum, unique
 from pymodbus.exceptions import ConnectionException
 
@@ -351,7 +352,14 @@ class BasePlugin:
 
                     DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {Column.ID}  offset:{offset}")
 
-                    if nValue != Devices[unit[Column.ID] + offset].nValue or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
+                    # Force update when device isn't updated for 12 hours
+                    updtime = time.strptime(Devices[unit[Column.ID] + offset].LastUpdate, "%Y-%m-%d %H:%M:%S")
+                    current_time = datetime.fromtimestamp(time.mktime(updtime))
+                    if (datetime.now() - current_time).total_seconds() > 3600*12:
+                        DomoLog(LogLevels.DEBUG, f">Force update {(datetime.now() - current_time).total_seconds()} device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+
+                    if (datetime.now() - current_time).total_seconds() > 3600*12 \
+                    or nValue != Devices[unit[Column.ID] + offset].nValue or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
                         DomoLog(LogLevels.DEBUG, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
                         Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
                         updated += 1
