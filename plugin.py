@@ -345,20 +345,16 @@ class BasePlugin:
                     #   We should not store certain values when the inverter is sleeping.
                     #   That results in a strange graph; it would be better just to skip it then.
                     nValue=0
+
+                    # Set dimmer to the correct status/Level
                     if (unit[Column.ID] == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
-                        # sValue = str(int(sValue))
                         if value > 0:
                            nValue = 2
 
                     # Set Selector switch level to 0;10;20;30 ....
-                    if (unit[Column.ID] == inverters.InverterUnit.STORAGECONTROL ):
-                        Level = Level * 10
-                        if value > 0:
-                           nValue = 2
-
-                    # Set Selector switch level to 0;10;20;30 ....
-                    if (unit[Column.ID] == inverters.InverterUnit.RCCMDMODE ):
-                        Level = Level * 10
+                    if (unit[Column.ID] == inverters.InverterUnit.STORAGECONTROL ) \
+                    or (unit[Column.ID] == inverters.InverterUnit.RCCMDMODE ):
+                        sValue = unit[Column.FORMAT].format(value*10)
                         if value > 0:
                            nValue = 2
 
@@ -435,35 +431,31 @@ class BasePlugin:
 
         return value
 
+    #
+    # Process Device changes made in DOmoticz
+    #
     def onCommand(self, iUnit, Command, Level, Hue):
         # Set PowerLevel when the dimmer level is changed in Domoticz
         DomoLog(LogLevels.VERBOSE,"onCommand called for Unit " + str(iUnit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
-        if (iUnit == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
+        modbusname = self.GetModbusnameFromID(iUnit)
+        if modbusname == "active_power_limit" :
             if Command == "Off":
                 Level = 0
-            DomoLog(LogLevels.DSTATUS, f"Send active_power_limit Level {Level} to SolarEdge")
-            self.inverter.write("active_power_limit", Level)
+            DomoLog(LogLevels.DSTATUS, f"Send {self.GetModbusnameFromID(iUnit)} Level {Level} to SolarEdge")
+            self.inverter.write(modbusname, Level)
 
         # Use Selector switch level 0;10;20;30 and change that to 0;1;2;3
-        if (iUnit == inverters.InverterUnit.STORAGECONTROL ):
+        if modbusname == "storage_control_mode"  \
+        or modbusname == "rc_cmd_mode":
             Level = Level/10
             if Command == "Off":
                 Level = 0
-            DomoLog(LogLevels.DSTATUS, f"Send storage_control_mode Level {Level} to SolarEdge")
-            self.inverter.write("storage_control_mode", Level)
-
-        # Use Selector switch level 0;10;20;30 and change that to 0;1;2;3
-        if (iUnit == inverters.InverterUnit.RCCMDMODE ):
-            Level = Level/10
-            if Command == "Off":
-                Level = 0
-            DomoLog(LogLevels.DSTATUS, f"Send rc_cmd_mode Level {Level} to SolarEdge")
-            self.inverter.write("rc_cmd_mode", Level)
+            DomoLog(LogLevels.DSTATUS, f"Send {self.GetModbusnameFromID(iUnit)} Level {Level} to SolarEdge")
+            self.inverter.write(modbusname, Level)
 
     #
     # Connect to the inverter and initialize the lookup tables.
     #
-
     def connectToInverter(self):
 
         DomoLog(LogLevels.EXTRA, "Entered connectToInverter()")
@@ -561,6 +553,18 @@ class BasePlugin:
                             details.update({"table": inverters.OTHER_INVERTER})
 
                         self.device_dictionary["Inverter"] = details
+                        # Check for Battery conected and Remove Selector Switches when no Battery is detected
+                        if "storage_ac_charge_limit" in inverter_values and inverter_values["storage_ac_charge_limit"] == 0.0:
+                            DomoLog(LogLevels.VERBOSE, "No Battery detected so skipping those options.")
+                            self.device_dictionary["Inverter"]["table"] = [
+                                entry for entry in self.device_dictionary["Inverter"]["table"]
+                                if entry[0] not in (inverters.InverterUnit.RCCMDMODE, inverters.InverterUnit.STORAGECONTROL)
+                            ]
+                            self.addUpdateDevices("Inverter")
+                            DomoLog(LogLevels.EXTRA, "Leaving connectToInverter()")
+                            return
+
+                        # Only perform when we detected a Battery info in the Inverter info block
                         self.addUpdateDevices("Inverter")
 
                         # Scan for meters
@@ -755,6 +759,15 @@ class BasePlugin:
                         ).Create()
 
         DomoLog(LogLevels.EXTRA, "Leaving addUpdateDevices()")
+
+    # Function to find domoticz device ID
+    def GetModbusnameFromID(self, id):
+        for device_name in self.device_dictionary:
+            table = self.device_dictionary[device_name]["table"]
+            offset = self.device_dictionary[device_name]["offset"]
+            for unit in table:
+                if unit[Column.ID] + offset == id:
+                    return unit[Column.MODBUSNAME]
 
     # Function to retrieve P1 info to sync with SE info
     def get_p1_syncsecs(self):
