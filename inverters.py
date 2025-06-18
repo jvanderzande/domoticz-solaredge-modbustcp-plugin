@@ -28,8 +28,8 @@ class InverterUnit(IntEnum):
     VOLTAGE_DC          = 20
     POWER_DC            = 21
     TEMPERATURE         = 22
-    RRCR_STATE          = 23
-    ACTIVE_POWER_LIMIT  = 24
+    RRCR_STATE          = 24
+    ACTIVE_POWER_LIMIT  = 23
     COSPHI              = 25
     STORAGECONTROL      = 26
     RCCMDMODE           = 27
