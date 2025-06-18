@@ -9,21 +9,11 @@
 #
 
 """
-<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen" version="2.0.4" externallink="https://github.com/addiejanssen/domoticz-solaredge-modbustcp-plugin">
+<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.4.2" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
     <params>
         <param field="Address" label="Inverter IP Address" width="150px" required="true" />
         <param field="Port" label="Inverter Port Number" width="150px" required="true" default="502" />
         <param field="Mode3" label="Inverter Modbus device address" width="150px" required="true" default="1" />
-
-        <param field="Mode6" label="Hardware components" width="150px" required="true" default="0" >
-            <options>
-                <option label="Inverter"                  value="0" default="true" />
-                <option label="Inverter+Meters"           value="1"                />
-                <option label="Inverter+Batteries"        value="2"                />
-                <option label="Inverter+Meters+Batteries" value="3"                />
-            </options>
-        </param>
-
         <param field="Mode1" label="Add missing devices" width="150px" required="true" default="Yes" >
             <options>
                 <option label="Yes" value="Yes" default="true" />
@@ -45,6 +35,8 @@
             </options>
         </param>
 
+        <param field="Mode6" label="Sync P1 device IDX (0=noSync)" width="100px" required="true" default="0" />
+
         <param field="Mode4" label="Auto Avg/Max math" width="150px">
             <options>
                 <option label="Enabled"  value="Yes" default="true" />
@@ -56,8 +48,8 @@
             <options>
                 <option label="Normal"    value="0" default="true" />
                 <option label="Verbose"   value="1"                />
-                <option label="Verbose+"  value="2"                />
-                <option label="Verbose++" value="3"                />
+                <option label="Extra"     value="2"                />
+                <option label="DEBUG"     value="3"                />
             </options>
         </param>
     </params>
@@ -72,10 +64,13 @@ import inverters
 import meters
 import batteries
 
-from helpers import DomoLog, LogLevels, SetLogLevel
+from helpers import DomoLog, LogLevels, SetLogLevel, UpdatePeriod
+
 from datetime import datetime, timedelta
 from enum import IntEnum, unique
 from pymodbus.exceptions import ConnectionException
+
+import urllib.request
 
 #
 # The plugin is using a few tables to setup Domoticz and to process the feedback from the inverter.
@@ -126,11 +121,6 @@ class BasePlugin:
 
         self.max_samples = 30
 
-        # Whether we should scan for meters and/or batteries
-
-        self.scan_for_meters = False
-        self.scan_for_batteries = False
-
         # Whether the plugin should add missing devices.
         # If set to True, a deleted device will be added on the next restart of Domoticz.
 
@@ -151,6 +141,19 @@ class BasePlugin:
         self.retrydelay = timedelta(minutes = 2)
         self.retryafter = datetime.now() - timedelta(seconds = 1)
 
+        # Sync variables
+        self.pstarttime = datetime.now()
+        self.SE_LastUpdate = None
+        self.p1_idx = 0
+        self.p1_Last_Update = None
+        self.p1_Prev_Update = None
+        self.p1_HeartBeat = None
+        self.p1_HeartBeat_diffcnt = 0
+        self.p1_delta_diffcnt = 0
+        self.avgupdperiod = UpdatePeriod()
+        self.avgupdperiod.set_max_samples(5)
+
+
     #
     # onStart is called by Domoticz to start the processing of the plugin.
     #
@@ -158,20 +161,24 @@ class BasePlugin:
     def onStart(self):
         DomoLog(LogLevels.EXTRA, "Entered onStart()")
 
-        # Get the choices of the user and turn them into something we can use
+        try:
+            from importlib.metadata import version, PackageNotFoundError
+        except ImportError:
+            DomoLog(LogLevels.NORMAL,"on older python so no importlib")
 
-        # Mode 6 defines which hardware components we should scan for
-        components = int(Parameters["Mode6"]) if Parameters["Mode6"] else 0
-        if components == 1:
-            self.scan_for_meters = True
-        elif components == 2:
-            self.scan_for_batteries = True
-        elif components == 3:
-            self.scan_for_meters = True
-            self.scan_for_batteries = True
-        else:
-            self.scan_for_meters = False
-            self.scan_for_batteries = False
+        solaredge_version = "Git"
+        try:
+            solaredge_version = version("solaredge_modbus")
+        except Exception as e:
+            solaredge_version = "unknown"
+
+        try:
+            pymodbus_version = version("pymodbus")
+        except Exception as e:
+            pymodbus_version = "unknown"
+
+        DomoLog(LogLevels.DSTATUS,f"solaredge_modbus version: {solaredge_version}")
+        DomoLog(LogLevels.DSTATUS,f"pymodbus         version: {pymodbus_version}")
 
         # Mode 1 defines if we should add missing devices or not
         if Parameters["Mode1"] == "Yes":
@@ -189,8 +196,16 @@ class BasePlugin:
         # Calculate the number of samples to store over a period of 5 minutes.
         self.max_samples = 300 / int(Parameters["Mode2"])
 
-        # Now set the interval at which the information is collected accordingly.
-        Domoticz.Heartbeat(int(Parameters["Mode2"]))
+        # Now set the update interval mode.
+        try:
+            self.p1_idx = int(Parameters["Mode6"])
+        except ValueError:
+            self.p1_idx = 0  # fallback
+
+        if self.p1_idx > 0:
+            Domoticz.Heartbeat(1)    #start with 1 seconds to be able to determine the P1 update heartbeat
+        else:
+            Domoticz.Heartbeat(int(Parameters["Mode2"]))
 
         # Set the logging level
         SetLogLevel(LogLevels(int(Parameters["Mode5"])))
@@ -211,6 +226,12 @@ class BasePlugin:
 
     def onHeartbeat(self):
         DomoLog(LogLevels.EXTRA, "Entered onHeartbeat()")
+
+        # Calculate the update frequency for P1 idx provided and the Delta after init.
+        if int(self.p1_idx) > 0:
+            # Time reached to update SE?
+            if not self.get_p1_syncsecs():
+                return
 
         if self.inverter and self.inverter.connected():
 
@@ -244,11 +265,11 @@ class BasePlugin:
                             DomoLog(LogLevels.NORMAL, "Connection Exception when trying to communicate with: {}:{} Device Address: {}".format(self.inverter_address, self.inverter_port, self.inverter_unit))
 
                     if values:
-                        DomoLog(LogLevels.NORMAL, "Inverter returned information for {}".format(device_name))
+                        DomoLog(LogLevels.EXTRA, "Inverter returned information for {}".format(device_name))
                         to_log = values
                         if "c_serialnumber" in to_log:
                             to_log.pop("c_serialnumber")
-                        DomoLog(LogLevels.VERBOSE, "device: {} values: {}".format(device_name, json.dumps(to_log, indent=4, sort_keys=False)))
+                        DomoLog(LogLevels.EXTRA, "device: {} values: {}".format(device_name, json.dumps(to_log, indent=4, sort_keys=False)))
 
                         self.processValues(device_details, values)
                     else:
@@ -284,7 +305,7 @@ class BasePlugin:
                 # Skip a unit when the matching device got deleted.
 
                 if (unit[Column.ID] + offset) in Devices:
-                    DomoLog(LogLevels.EXTRA, str(unit[Column.ID]) + "-> device available")
+                    DomoLog(LogLevels.DEBUG, str(unit[Column.ID]) + "-> device available")
 
                     # Get the value for this unit from the Inverter data
                     value = self.getUnitValue(unit, inverter_data)
@@ -294,28 +315,28 @@ class BasePlugin:
                     # Currently, there is only a need to prepend one value with another.
 
                     if unit[Column.PREPEND_ROW]:
-                        DomoLog(LogLevels.MAX, "-> has prepend lookup row")
+                        DomoLog(LogLevels.DEBUG, "-> has prepend lookup row")
                         prepend = self.getUnitValue(table[unit[Column.PREPEND_ROW]], inverter_data)
-                        DomoLog(LogLevels.MAX, "prepend = {}".format(prepend))
+                        DomoLog(LogLevels.DEBUG, "prepend = {}".format(prepend))
 
                         if unit[Column.PREPEND_MATH]:
-                            DomoLog(LogLevels.MAX, "-> has prepend math")
+                            DomoLog(LogLevels.DEBUG, "-> has prepend math")
                             m = unit[Column.PREPEND_MATH]
                             prepend = m.get(prepend)
-                            DomoLog(LogLevels.MAX, "prepend = {}".format(prepend))
+                            DomoLog(LogLevels.DEBUG, "prepend = {}".format(prepend))
 
                         sValue = unit[Column.FORMAT].format(prepend, value)
 
                     elif unit[Column.APPEND_MATH]:
-                        DomoLog(LogLevels.MAX, "-> has append math")
+                        DomoLog(LogLevels.DEBUG, "-> has append math")
                         m = unit[Column.APPEND_MATH]
                         append = m.get(0)
-                        DomoLog(LogLevels.MAX, "append = {}".format(append))
+                        DomoLog(LogLevels.DEBUG, "append = {}".format(append))
 
                         sValue = unit[Column.FORMAT].format(value, append)
 
                     else:
-                        DomoLog(LogLevels.MAX, "-> no prepend")
+                        DomoLog(LogLevels.DEBUG, "-> no prepend")
                         sValue = unit[Column.FORMAT].format(value)
 
                     # Only store the value in Domoticz when it has changed.
@@ -323,22 +344,24 @@ class BasePlugin:
                     #   We should not store certain values when the inverter is sleeping.
                     #   That results in a strange graph; it would be better just to skip it then.
                     nValue=0
-                    if (unit[Column.ID + offset] == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
+                    if (unit[Column.ID] == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
                         # sValue = str(int(sValue))
                         if value > 0:
                            nValue = 2
 
-                        DomoLog(LogLevels.NORMAL, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+                    DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {Column.ID}  offset:{offset}")
 
-                    if nValue != Devices[unit[Column.ID + offset]].nValue or (nValue == Devices[unit[Column.ID + offset]].nValue and sValue != Devices[unit[Column.ID + offset]].sValue):
+                    if nValue != Devices[unit[Column.ID] + offset].nValue or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
+                        DomoLog(LogLevels.DEBUG, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
                         Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
                         updated += 1
+
                     device_count += 1
 
                 else:
-                    DomoLog(LogLevels.MAX, str(unit[Column.ID]) + "-> skipping device not available")
+                    DomoLog(LogLevels.DEBUG, str(unit[Column.ID]) + "-> skipping device not available")
 
-            DomoLog(LogLevels.NORMAL, "Updated {} values out of {}".format(updated, device_count))
+            DomoLog(LogLevels.EXTRA, "Updated {} values out of {}".format(updated, device_count))
 
         DomoLog(LogLevels.EXTRA, "Leaving processValues()")
 
@@ -349,11 +372,11 @@ class BasePlugin:
 
     def getUnitValue(self, row, inverter_data):
 
-        DomoLog(LogLevels.EXTRA, "Entered getUnitValue()")
+        DomoLog(LogLevels.DEBUG, "Entered getUnitValue()")
 
         # For certain units the table has a lookup table to replace the value with something else.
         if row[Column.LOOKUP]:
-            DomoLog(LogLevels.MAX, "-> looking up...")
+            DomoLog(LogLevels.DEBUG, "-> looking up...")
 
             lookup_table = row[Column.LOOKUP]
             to_lookup = int(inverter_data[row[Column.MODBUSNAME]])
@@ -365,7 +388,7 @@ class BasePlugin:
 
         # When a math object is setup for the unit, update the samples in it and get the calculated value.
         elif row[Column.MATH] and self.do_math:
-            DomoLog(LogLevels.MAX, "-> calculating...")
+            DomoLog(LogLevels.DEBUG, "-> calculating...")
             m = row[Column.MATH]
             if row[Column.MODBUSSCALE]:
                 m.update(inverter_data[row[Column.MODBUSNAME]], inverter_data[row[Column.MODBUSSCALE]])
@@ -377,18 +400,18 @@ class BasePlugin:
         # When there is no math object then just store the latest value.
         # Some date from the inverter need to be scaled before they can be stored.
         elif row[Column.MODBUSSCALE]:
-            DomoLog(LogLevels.MAX, "-> scaling...")
+            DomoLog(LogLevels.DEBUG, "-> scaling...")
             # we need to do some calculation here
             value = inverter_data[row[Column.MODBUSNAME]] * (10 ** inverter_data[row[Column.MODBUSSCALE]])
 
         # Some data require no action but storing in Domoticz.
         else:
-            DomoLog(LogLevels.MAX, "-> copying...")
+            DomoLog(LogLevels.DEBUG, "-> copying...")
             value = inverter_data[row[Column.MODBUSNAME]]
 
-        DomoLog(LogLevels.MAX, "value = {}".format(value))
+        DomoLog(LogLevels.DEBUG, "value = {}".format(value))
 
-        DomoLog(LogLevels.EXTRA, "Leaving getUnitValue()")
+        DomoLog(LogLevels.DEBUG, "Leaving getUnitValue()")
 
         return value
 
@@ -398,7 +421,7 @@ class BasePlugin:
         if (iUnit == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
             if Command == "Off":
                 Level = 0
-            DomoLog(LogLevels.NORMAL, f"Send active_power_limit Level {Level} to SolarEdge")
+            DomoLog(LogLevels.DSTATUS, f"Send active_power_limit Level {Level} to SolarEdge")
             self.inverter.write("active_power_limit", Level)
 
     #
@@ -414,7 +437,7 @@ class BasePlugin:
         if (self.inverter == None):
 
             # Let's go
-            DomoLog(LogLevels.MAX,
+            DomoLog(LogLevels.DEBUG,
                 "onStart Address: {} Port: {} Device Address: {}".format(
                     self.inverter_address,
                     self.inverter_port,
@@ -470,12 +493,12 @@ class BasePlugin:
 
                 else:
                     if inverter_values:
-                        DomoLog(LogLevels.NORMAL, "Inverter returned information")
+                        DomoLog(LogLevels.EXTRA, "Inverter returned information")
 
                         to_log = inverter_values
                         if "c_serialnumber" in to_log:
                             to_log.pop("c_serialnumber")
-                        DomoLog(LogLevels.VERBOSE, "device: {} values: {}".format("Inverter", json.dumps(to_log, indent=4, sort_keys=False)))
+                        DomoLog(LogLevels.EXTRA, "device: {} values: {}".format("Inverter", json.dumps(to_log, indent=4, sort_keys=False)))
 
                         known_sunspec_DIDS = set(item.value for item in solaredge_modbus.sunspecDID)
 
@@ -490,9 +513,9 @@ class BasePlugin:
                         c_sunspec_did = inverter_values["c_sunspec_did"]
                         if c_sunspec_did in known_sunspec_DIDS:
                             inverter_type = solaredge_modbus.sunspecDID(c_sunspec_did)
-                            DomoLog(LogLevels.NORMAL, "Inverter type: {}".format(solaredge_modbus.C_SUNSPEC_DID_MAP[str(inverter_type.value)]))
+                            DomoLog(LogLevels.DSTATUS, "Inverter type: {}".format(solaredge_modbus.C_SUNSPEC_DID_MAP[str(inverter_type.value)]))
                         else:
-                            DomoLog(LogLevels.NORMAL, "Unknown inverter type: {}".format(c_sunspec_did))
+                            DomoLog(LogLevels.DSTATUS, "Unknown inverter type: {}".format(c_sunspec_did))
 
                         if inverter_type == solaredge_modbus.sunspecDID.SINGLE_PHASE_INVERTER:
                             details.update({"table": inverters.SINGLE_PHASE_INVERTER})
@@ -504,103 +527,120 @@ class BasePlugin:
                         self.device_dictionary["Inverter"] = details
                         self.addUpdateDevices("Inverter")
 
-                        # Scan for meters if required
-                        if self.scan_for_meters:
-                            DomoLog(LogLevels.NORMAL, "Scanning for meters")
+                        # Scan for meters
+                        DomoLog(LogLevels.NORMAL, "Scanning for meters")
 
-                            device_offset = max(inverters.InverterUnit)
-                            all_meters = self.inverter.meters()
-                            if all_meters:
-                                DomoLog(LogLevels.NORMAL, "Found at least one meter")
+                        device_offset = max(inverters.InverterUnit)
+                        all_meters = self.inverter.meters()
+                        if all_meters:
+                            DomoLog(LogLevels.NORMAL, "Found at least one meter")
+                            munit = 0
+                            mfunits = 0
 
-                                for meter, params in all_meters.items():
-                                    meter_values = params.read_all()
+                            for meter, params in all_meters.items():
+                                meter_values = params.read_all()
+                                munit += 1
 
-                                    if meter_values:
-                                        DomoLog(LogLevels.NORMAL, "Inverter returned meter information")
+                                if meter_values:
+                                    if meter_values["c_version"] == "False":
+                                        DomoLog(LogLevels.VERBOSE, f"Meters unit {meter} not connected.")
+                                        continue
 
-                                        to_log = meter_values
-                                        if "c_serialnumber" in to_log:
-                                            to_log.pop("c_serialnumber")
-                                        DomoLog(LogLevels.VERBOSE, "device: {} values: {}".format(meter, json.dumps(to_log, indent=4, sort_keys=False)))
+                                    mfunits += 1
 
-                                        details = {
-                                            "type": "meter",
-                                            "offset": device_offset,
-                                            "table": None
-                                        }
-                                        device_offset = device_offset + max(meters.MeterUnit)
+                                    DomoLog(LogLevels.NORMAL, "Inverter returned meter information")
 
-                                        meter_type = None
-                                        c_sunspec_did = meter_values["c_sunspec_did"]
-                                        if c_sunspec_did in known_sunspec_DIDS:
-                                            meter_type = solaredge_modbus.sunspecDID(c_sunspec_did)
-                                            DomoLog(LogLevels.NORMAL, "Meter type: {}".format(solaredge_modbus.C_SUNSPEC_DID_MAP[str(meter_type.value)]))
-                                        else:
-                                            DomoLog(LogLevels.NORMAL, "Unknown meter type: {}".format(c_sunspec_did))
+                                    to_log = meter_values
+                                    if "c_serialnumber" in to_log:
+                                        to_log.pop("c_serialnumber")
+                                    DomoLog(LogLevels.EXTRA, "device: {} values: {}".format(meter, json.dumps(to_log, indent=4, sort_keys=False)))
 
-                                        if meter_type == solaredge_modbus.sunspecDID.SINGLE_PHASE_METER:
-                                            details.update({"table": meters.SINGLE_PHASE_METER})
-                                        elif meter_type == solaredge_modbus.sunspecDID.WYE_THREE_PHASE_METER:
-                                            details.update({"table": meters.WYE_THREE_PHASE_METER})
-                                        else:
-                                            details.update({"table": meters.OTHER_METER})
+                                    details = {
+                                        "type": "meter",
+                                        "offset": device_offset,
+                                        "table": None
+                                    }
+                                    device_offset = device_offset + max(meters.MeterUnit)
 
-                                        self.device_dictionary[meter] = details
-                                        self.addUpdateDevices(meter)
+                                    meter_type = None
+                                    c_sunspec_did = meter_values["c_sunspec_did"]
+                                    if c_sunspec_did in known_sunspec_DIDS:
+                                        meter_type = solaredge_modbus.sunspecDID(c_sunspec_did)
+                                        DomoLog(LogLevels.NORMAL, "Meter type: {}".format(solaredge_modbus.C_SUNSPEC_DID_MAP[str(meter_type.value)]))
                                     else:
-                                        DomoLog(LogLevels.NORMAL, "Found {}. BUT... inverter didn't return information".format(meter))
-                            else:
+                                        DomoLog(LogLevels.NORMAL, "Unknown meter type: {}".format(c_sunspec_did))
+
+                                    if meter_type == solaredge_modbus.sunspecDID.SINGLE_PHASE_METER:
+                                        details.update({"table": meters.SINGLE_PHASE_METER})
+                                    elif meter_type == solaredge_modbus.sunspecDID.WYE_THREE_PHASE_METER:
+                                        details.update({"table": meters.WYE_THREE_PHASE_METER})
+                                    else:
+                                        details.update({"table": meters.OTHER_METER})
+
+                                    self.device_dictionary[meter] = details
+                                    self.addUpdateDevices(meter)
+                                else:
+                                    DomoLog(LogLevels.NORMAL, "Found {}. BUT... inverter didn't return information".format(meter))
+
+                            if mfunits == 0:
                                 DomoLog(LogLevels.NORMAL, "No meters found")
+
                         else:
-                            DomoLog(LogLevels.NORMAL, "Skip scanning for meters")
+                            DomoLog(LogLevels.NORMAL, "No meters found")
+
                         # End scan for meters
 
-                        # Scan for batteries if required
-                        if self.scan_for_batteries:
-                            DomoLog(LogLevels.NORMAL, "Scanning for batteries")
+                        # Scan for batteries
 
-                            device_offset = max(inverters.InverterUnit) + (3 * max(meters.MeterUnit))
-                            all_batteries = self.inverter.batteries()
-                            if all_batteries:
-                                DomoLog(LogLevels.NORMAL, "Found at least one battery")
+                        DomoLog(LogLevels.NORMAL, "Scanning for batteries")
 
-                                for battery, params in all_batteries.items():
-                                    battery_values = params.read_all()
+                        device_offset = max(inverters.InverterUnit) + (3 * max(meters.MeterUnit))
+                        all_batteries = self.inverter.batteries()
+                        if all_batteries:
+                            DomoLog(LogLevels.VERBOSE, "Received Battery information block")
+                            bunit = 0
+                            bfunits = 0
+                            for battery, params in all_batteries.items():
+                                battery_values = params.read_all()
+                                bunit += 1
+                                if battery_values:
+                                    if battery_values["c_version"] == "False":
+                                        DomoLog(LogLevels.VERBOSE, f"Battery unit {battery} not connected.")
+                                        continue
 
-                                    if battery_values:
-                                        DomoLog(LogLevels.NORMAL, "Inverter returned battery information")
+                                    bfunits += 1
+                                    DomoLog(LogLevels.NORMAL, "Inverter returned battery information")
+                                    to_log = battery_values
+                                    if "c_serialnumber" in to_log:
+                                        to_log.pop("c_serialnumber")
+                                    DomoLog(LogLevels.EXTRA, "device: {} values: {}".format(battery, json.dumps(to_log, indent=4, sort_keys=False)))
 
-                                        to_log = battery_values
-                                        if "c_serialnumber" in to_log:
-                                            to_log.pop("c_serialnumber")
-                                        DomoLog(LogLevels.VERBOSE, "device: {} values: {}".format(battery, json.dumps(to_log, indent=4, sort_keys=False)))
+                                    details = {
+                                        "type": "battery",
+                                        "offset": device_offset,
+                                        "table": None
+                                    }
+                                    device_offset = device_offset + max(batteries.BatteryUnit)
 
-                                        details = {
-                                            "type": "battery",
-                                            "offset": device_offset,
-                                            "table": None
-                                        }
-                                        device_offset = device_offset + max(batteries.BatteryUnit)
-
-                                        battery_type = None
-                                        c_sunspec_did = battery_values["c_sunspec_did"]
-                                        if c_sunspec_did in known_sunspec_DIDS:
-                                            battery_type = solaredge_modbus.sunspecDID(c_sunspec_did)
-                                            DomoLog(LogLevels.NORMAL, "Battery type: {}".format(solaredge_modbus.C_SUNSPEC_DID_MAP[str(battery_type.value)]))
-                                        else:
-                                            DomoLog(LogLevels.NORMAL, "Unknown battery type: {}".format(c_sunspec_did))
-
-                                        details.update({"table": batteries.OTHER_BATTERY})
-
-                                        self.device_dictionary[battery] = details
-                                        self.addUpdateDevices(battery)
+                                    battery_type = None
+                                    c_sunspec_did = battery_values["c_sunspec_did"]
+                                    if c_sunspec_did in known_sunspec_DIDS:
+                                        battery_type = solaredge_modbus.sunspecDID(c_sunspec_did)
+                                        DomoLog(LogLevels.NORMAL, "Battery type: {}".format(solaredge_modbus.C_SUNSPEC_DID_MAP[str(battery_type.value)]))
                                     else:
-                                        DomoLog(LogLevels.NORMAL, "Found {}. BUT... inverter didn't return information".format(battery))
-                            else:
+                                        DomoLog(LogLevels.NORMAL, "Unknown battery type: {}".format(c_sunspec_did))
+
+                                    details.update({"table": batteries.OTHER_BATTERY})
+
+                                    self.device_dictionary[battery] = details
+                                    self.addUpdateDevices(battery)
+                                else:
+                                    DomoLog(LogLevels.NORMAL, "Found {}. BUT... inverter didn't return information".format(battery))
+                            if bfunits == 0:
                                 DomoLog(LogLevels.NORMAL, "No batteries found")
+
                         else:
-                            DomoLog(LogLevels.NORMAL, "Skip scanning for batteries")
+                            DomoLog(LogLevels.NORMAL, "No batteries found")
                         # End scan for batteries
 
                     else:
@@ -679,6 +719,118 @@ class BasePlugin:
                         ).Create()
 
         DomoLog(LogLevels.EXTRA, "Leaving addUpdateDevices()")
+
+    # Function to retrieve P1 info to sync with SE info
+    def get_p1_syncsecs(self):
+        url = f"http://127.0.0.1:8080/json.htm?type=command&param=getdevices&rid={self.p1_idx}"
+        P1Delta = 0
+        last_update_str = ""
+        p1_dev_name = ""
+        p1_dev_idx = ""
+        respdata = None
+        # Get Device info from local Domoticz website
+        try:
+            with urllib.request.urlopen(url, timeout=5) as response:
+                respdata = response.read()
+
+        except urllib.error.URLError as e:
+            DomoLog(LogLevels.NORMAL,url)
+            self.p1_HeartBeat = int(Parameters["Mode2"])
+            self.p1_idx = 0
+            Domoticz.Heartbeat(self.p1_HeartBeat)
+            DomoLog(LogLevels.DSTATUS,f"Error retrieving device status so using default heartbeat {self.p1_HeartBeat}")
+            DomoLog(LogLevels.NORMAL,f"URL response: {e}")
+            return True
+
+        # Check and retrieve P1 Device info which we want to sync with
+        try:
+            data = json.loads(respdata.decode('utf-8'))
+            last_update_str = data["result"][0]["LastUpdate"]
+            p1_dev_name = data["result"][0]["Name"]
+            p1_dev_idx = data["result"][0]["idx"]
+
+        except Exception as e:
+            if self.p1_HeartBeat and Domoticz.Heartbeat() == self.p1_HeartBeat:
+                DomoLog(LogLevels.DSTATUS,f"Failed to get Domoticz info so keep using current refresh rate {self.p1_HeartBeat}: {url}")
+                self.p1_HeartBeat = int(Parameters["Mode2"])
+                return True
+            else:
+                DomoLog(LogLevels.VERBOSE,f"Url used: {url}")
+                DomoLog(LogLevels.NORMAL,f"Error retrieving device status for IDX {self.p1_idx} so using default heartbeat {self.p1_HeartBeat}")
+                DomoLog(LogLevels.VERBOSE,f"Domoticz JSON response: {json.dumps(data, separators=(',', ':'))}")
+                self.p1_HeartBeat = int(Parameters["Mode2"])
+                self.p1_idx = 0
+                return True
+
+        # Update info
+        if not self.avgupdperiod.initdone():
+            DomoLog(LogLevels.DSTATUS,f"Checking the update timing for P1 {p1_dev_idx} -  {p1_dev_name} ")
+
+        self.avgupdperiod.update(last_update_str)
+        P1Delta = int(self.avgupdperiod.seconds_last_update())
+
+        if P1Delta > 60 and (datetime.now() - self.pstarttime).total_seconds() >= 60:
+            if self.p1_HeartBeat:
+                self.p1_HeartBeat = int(Parameters["Mode2"])
+                self.p1_idx = 0
+                DomoLog(LogLevels.NORMAL,"P1 device '{}' did not update for 1 minute so use default Heartbeat {}".format(p1_dev_name, self.p1_HeartBeat))
+            else:
+                DomoLog(LogLevels.DSTATUS,f"Skip Sync as P1 not updated last ({ P1Delta }) seconds and restore default update interval." )
+                Domoticz.Heartbeat(int(Parameters["Mode2"]))
+
+            return False
+
+        cP1Delta = 0
+        upd_SE = False
+        # Enough info to determine the P1 Update timing
+        if self.avgupdperiod.count() >= 1:
+            if not self.p1_HeartBeat:
+                DomoLog(LogLevels.DSTATUS,f"Found update timing of {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ")
+            elif self.p1_HeartBeat != round(self.avgupdperiod.get()):
+                DomoLog(LogLevels.DSTATUS,f"Change update timing of {self.p1_HeartBeat} to {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ")
+                DomoLog(LogLevels.DEBUG,f"P1 Delta {P1Delta} {self.avgupdperiod.count()} {round(self.avgupdperiod.get())}")
+
+            self.p1_HeartBeat = round(self.avgupdperiod.get())
+            # Get mod (10->0) when P1_HeartBeat = 10
+            cP1Delta = round(P1Delta % self.p1_HeartBeat)
+
+            # Calculate the "Mid" Update secs as we want to do 2 Hearbeats within the p1_HeartBeat update time
+            cNextHB = round(self.p1_HeartBeat/2 - cP1Delta)
+
+            # calculate the next expected update for P1 and Set the Heartbeat accordingly
+            if cP1Delta >= 2:
+                # Skip SE info update for the mid heartbeat
+                cNextHB = round(self.p1_HeartBeat - cP1Delta)
+            else:
+                # Update SE info now
+                upd_SE = True
+
+            ### Added for checking run #########
+            if cNextHB < 1:
+                DomoLog(LogLevels.DEBUG,f"!!! Use minimal 1 second as Heartbeat   > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}")
+                cNextHB = 1
+
+            if cNextHB > 30:
+                DomoLog(LogLevels.DEBUG,f"> use max 30 seconds as adviced > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}")
+                cNextHB = 30
+
+            Domoticz.Heartbeat(cNextHB)
+
+            DomoLog(LogLevels.DEBUG,f"--> upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}")
+
+        else:
+            # still calculating the P1 update interval so use default update interval
+            DomoLog(LogLevels.DEBUG,f"-> {self.avgupdperiod.count()} avg-> {round(self.avgupdperiod.get())}  P1Delta:{P1Delta}  lastupdate: {last_update_str}")
+
+            #seconds_last_update
+            if self.SE_LastUpdate is None or (datetime.now() - self.SE_LastUpdate).total_seconds() >= int(Parameters["Mode2"]):
+                upd_SE = True
+
+        if upd_SE:
+            self.SE_LastUpdate = datetime.now()
+
+        return upd_SE
+
 
 #
 # Instantiate the plugin and register the supported callbacks.
