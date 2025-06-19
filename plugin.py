@@ -436,22 +436,25 @@ class BasePlugin:
     #
     def onCommand(self, iUnit, Command, Level, Hue):
         # Set PowerLevel when the dimmer level is changed in Domoticz
-        DomoLog(LogLevels.VERBOSE,"onCommand called for Unit " + str(iUnit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
-        modbusname = self.GetModbusnameFromID(iUnit)
-        if modbusname == "active_power_limit" :
-            if Command == "Off":
-                Level = 0
-            DomoLog(LogLevels.DSTATUS, f"Send {self.GetModbusnameFromID(iUnit)} Level {Level} to SolarEdge")
-            self.inverter.write(modbusname, Level)
+        unitrec = self.GetUnitDefFromID(iUnit)
+        type = unitrec[Column.TYPE]
+        subtype = unitrec[Column.SUBTYPE]
+        switchtype = unitrec[Column.SWITCHTYPE]
+        modbusname = unitrec[Column.MODBUSNAME]
+        DomoLog(LogLevels.VERBOSE,f"onCommand called for Unit:{iUnit} Parameter:'{Command}' Level:{Level}  Unit info-> type:{type} subtype:{subtype} switchtype:{switchtype} modbusname:{modbusname} ")
 
-        # Use Selector switch level 0;10;20;30 and change that to 0;1;2;3
-        if modbusname == "storage_control_mode"  \
-        or modbusname == "rc_cmd_mode":
-            Level = Level/10
-            if Command == "Off":
+        # Select type:244(xF3)-Light/Switch  subtype:73(x49)-Switch
+        if type == 0xF4 and subtype == 0x49:
+            # Use Selector-18(x12) switch level 0;10;20;30 and change that to 0;1;2;3
+            if switchtype == 0x12:
+                Level = int(Level/10)
+            # Dimmer x07 / Selector x12 do set level to 0 for Off command
+            if (switchtype == 0x07 or switchtype == 0x12) and Command == "Off":
                 Level = 0
-            DomoLog(LogLevels.DSTATUS, f"Send {self.GetModbusnameFromID(iUnit)} Level {Level} to SolarEdge")
+            DomoLog(LogLevels.DSTATUS, f"Send modbusreg:'{modbusname}' Level {Level} to SolarEdge")
             self.inverter.write(modbusname, Level)
+            # update Domoticz immediately
+            Devices[iUnit].Update(nValue=2, sValue=str(Level), TimedOut=0)
 
     #
     # Connect to the inverter and initialize the lookup tables.
@@ -760,14 +763,14 @@ class BasePlugin:
 
         DomoLog(LogLevels.EXTRA, "Leaving addUpdateDevices()")
 
-    # Function to find domoticz device ID
-    def GetModbusnameFromID(self, id):
+    # Function to find domoticz device ID in Unit Tables
+    def GetUnitDefFromID(self, id):
         for device_name in self.device_dictionary:
             table = self.device_dictionary[device_name]["table"]
             offset = self.device_dictionary[device_name]["offset"]
             for unit in table:
                 if unit[Column.ID] + offset == id:
-                    return unit[Column.MODBUSNAME]
+                    return unit
 
     # Function to retrieve P1 info to sync with SE info
     def get_p1_syncsecs(self):
