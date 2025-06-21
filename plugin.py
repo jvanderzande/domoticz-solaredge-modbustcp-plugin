@@ -95,6 +95,7 @@ class Column(IntEnum):
     APPEND_MATH     = 11
     LOOKUP          = 12
     MATH            = 13
+    CUSTOMEICO      = 14
 
 
 #
@@ -751,15 +752,23 @@ class BasePlugin:
 
                         DomoLog(LogLevels.NORMAL, "Adding device \"{}\"".format(prepend_name + unit[Column.NAME]))
 
-                        Domoticz.Device(
-                            Unit=unit[Column.ID] + offset,
-                            Name=prepend_name + unit[Column.NAME],
-                            Type=unit[Column.TYPE],
-                            Subtype=unit[Column.SUBTYPE],
-                            Switchtype=unit[Column.SWITCHTYPE],
-                            Options=unit[Column.OPTIONS],
-                            Used=1,
-                        ).Create()
+                        device_args = {
+                            "Unit": unit[Column.ID] + offset,
+                            "Name": prepend_name + unit[Column.NAME],
+                            "Type": unit[Column.TYPE],
+                            "Subtype": unit[Column.SUBTYPE],
+                            "Switchtype": unit[Column.SWITCHTYPE],
+                            "Options": unit[Column.OPTIONS],
+                            "Used": 1,
+                        }
+
+                        try:
+                            device_args["Image"] = unit[Column.CUSTOMEICO]
+                        except:
+                            # ignore when customico not present
+                            pass
+
+                        Domoticz.Device(**device_args).Create()
 
         DomoLog(LogLevels.EXTRA, "Leaving addUpdateDevices()")
 
