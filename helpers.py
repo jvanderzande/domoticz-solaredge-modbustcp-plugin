@@ -143,7 +143,7 @@ class UpdatePeriod:
 
         # If there is a previous timestamp, calculate difference between the p
         if self.prev_update_time is not None:
-            time_diff = (current_time - self.last_update_time).total_seconds()
+            time_diff = (self.last_update_time - self.prev_update_time).total_seconds()
             self.samples.append(time_diff)
 
             # Keep samples within the max limit

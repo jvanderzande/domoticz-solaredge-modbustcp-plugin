@@ -9,7 +9,7 @@
 #
 
 """
-<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.5.1" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
+<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.5.2" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
     <params>
         <param field="Address" label="Inverter IP Address" width="150px" required="true" />
         <param field="Port" label="Inverter Port Number" width="150px" required="true" default="502" />
@@ -146,12 +146,9 @@ class BasePlugin:
         # Sync variables
         self.pstarttime = datetime.now()
         self.SE_LastUpdate = None
+        self.SE_HalfwayHB = False
         self.p1_idx = 0
-        self.p1_Last_Update = None
-        self.p1_Prev_Update = None
         self.p1_HeartBeat = None
-        self.p1_HeartBeat_diffcnt = 0
-        self.p1_delta_diffcnt = 0
         self.avgupdperiod = UpdatePeriod()
         self.avgupdperiod.set_max_samples(5)
 
@@ -841,14 +838,13 @@ class BasePlugin:
 
             return False
 
-        cP1Delta = 0
         upd_SE = False
         # Enough info to determine the P1 Update timing
         if self.avgupdperiod.count() >= 1:
             if not self.p1_HeartBeat:
                 DomoLog(LogLevels.DSTATUS,f"Found update timing of {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ")
             elif self.p1_HeartBeat != round(self.avgupdperiod.get()):
-                DomoLog(LogLevels.DSTATUS,f"Change update timing of {self.p1_HeartBeat} to {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ")
+                DomoLog(LogLevels.VERBOSE,f"Change update timing of {self.p1_HeartBeat} to {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ")
                 DomoLog(LogLevels.DEBUG,f"P1 Delta {P1Delta} {self.avgupdperiod.count()} {round(self.avgupdperiod.get())}")
 
             self.p1_HeartBeat = round(self.avgupdperiod.get())
@@ -858,26 +854,29 @@ class BasePlugin:
             # Calculate the "Mid" Update secs as we want to do 2 Hearbeats within the p1_HeartBeat update time
             cNextHB = round(self.p1_HeartBeat/2 - cP1Delta)
 
-            # calculate the next expected update for P1 and Set the Heartbeat accordingly
-            if cP1Delta >= 2:
-                # Skip SE info update for the mid heartbeat
-                cNextHB = round(self.p1_HeartBeat - cP1Delta)
+
+            if self.SE_HalfwayHB:
+                # Calculate the remaining Update secs to the next expected p1 update time
+                cNextHB = round(self.p1_HeartBeat - P1Delta)
+                self.SE_HalfwayHB = False
             else:
-                # Update SE info now
+                # Calculate the "Mid" Update secs as we want to do 2 Hearbeats within the p1_HeartBeat update time
+                cNextHB = round(self.p1_HeartBeat/2)
                 upd_SE = True
+                self.SE_HalfwayHB = True
 
             ### Added for checking run #########
             if cNextHB < 1:
-                DomoLog(LogLevels.DEBUG,f"!!! Use minimal 1 second as Heartbeat   > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}")
+                DomoLog(LogLevels.VERBOSE,f"!!! Use minimal 1 second as Heartbeat   > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  P1Delta: {P1Delta} lastupdate: {last_update_str}")
                 cNextHB = 1
 
             if cNextHB > 30:
-                DomoLog(LogLevels.DEBUG,f"> use max 30 seconds as adviced > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}")
+                DomoLog(LogLevels.VERBOSE,f"> use max 30 seconds as adviced > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  P1Delta: {P1Delta} lastupdate: {last_update_str}")
                 cNextHB = 30
 
             Domoticz.Heartbeat(cNextHB)
 
-            DomoLog(LogLevels.DEBUG,f"--> upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}")
+            DomoLog(LogLevels.DEBUG,f"--> upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  P1Delta: {P1Delta} lastupdate: {last_update_str}")
 
         else:
             # still calculating the P1 update interval so use default update interval
