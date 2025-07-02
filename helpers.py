@@ -132,18 +132,18 @@ class UpdatePeriod:
 
     def update(self, new_value):
         # Convert string to datetime
-        # current_time = datetime.strptime(new_value, "%Y-%m-%d %H:%M:%S")
+        # input_update_time = datetime.strptime(new_value, "%Y-%m-%d %H:%M:%S")
         updtime = time.strptime(new_value, "%Y-%m-%d %H:%M:%S")
-        current_time = datetime.fromtimestamp(time.mktime(updtime))
+        input_update_time = datetime.fromtimestamp(time.mktime(updtime))
 
         # Check if new_value is the same as the last recorded timestamp
-        if self.last_update_time and current_time == self.last_update_time:
+        if self.last_update_time and input_update_time == self.last_update_time:
             return  # No update needed
 
 
         # If there is a previous timestamp, calculate difference between the p
         if self.prev_update_time is not None:
-            time_diff = (self.last_update_time - self.prev_update_time).total_seconds()
+            time_diff = (input_update_time - self.last_update_time).total_seconds()
             self.samples.append(time_diff)
 
             # Keep samples within the max limit
@@ -151,7 +151,7 @@ class UpdatePeriod:
                 self.samples.pop(0)
         # Update last timestamp
         self.prev_update_time = self.last_update_time
-        self.last_update_time = current_time
+        self.last_update_time = input_update_time
 
     def get(self):
         if not self.samples:

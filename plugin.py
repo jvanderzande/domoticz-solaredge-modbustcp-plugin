@@ -554,18 +554,18 @@ class BasePlugin:
                             details.update({"table": inverters.OTHER_INVERTER})
 
                         self.device_dictionary["Inverter"] = details
-                        # Check for Battery conected and Remove Selector Switches when no Battery is detected
-                        if "storage_ac_charge_limit" in inverter_values and inverter_values["storage_ac_charge_limit"] == 0.0:
-                            DomoLog(LogLevels.VERBOSE, "No Battery detected so skipping those options.")
-                            self.device_dictionary["Inverter"]["table"] = [
-                                entry for entry in self.device_dictionary["Inverter"]["table"]
-                                if entry[0] not in (inverters.InverterUnit.RCCMDMODE, inverters.InverterUnit.STORAGECONTROL)
-                            ]
-                            self.addUpdateDevices("Inverter")
-                            DomoLog(LogLevels.EXTRA, "Leaving connectToInverter()")
-                            return
+                        # # Check for Battery conected and Remove Selector Switches when no Battery is detected
+                        # if "storage_ac_charge_limit" in inverter_values and inverter_values["storage_ac_charge_limit"] == 0.0:
+                        #     DomoLog(LogLevels.VERBOSE, "No Battery detected so skipping those options.")
+                        #     self.device_dictionary["Inverter"]["table"] = [
+                        #         entry for entry in self.device_dictionary["Inverter"]["table"]
+                        #         if entry[0] not in (inverters.InverterUnit.RCCMDMODE, inverters.InverterUnit.STORAGECONTROL)
+                        #     ]
+                        #     self.addUpdateDevices("Inverter")
+                        #     DomoLog(LogLevels.EXTRA, "Leaving connectToInverter()")
+                        #     return
 
-                        # Only perform when we detected a Battery info in the Inverter info block
+                        # # Only perform when we detected a Battery info in the Inverter info block
                         self.addUpdateDevices("Inverter")
 
                         # Scan for meters
@@ -840,7 +840,7 @@ class BasePlugin:
 
         upd_SE = False
         # Enough info to determine the P1 Update timing
-        if self.avgupdperiod.count() >= 1:
+        if self.avgupdperiod.count() >= 3:
             if not self.p1_HeartBeat:
                 DomoLog(LogLevels.DSTATUS,f"Found update timing of {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ")
             elif self.p1_HeartBeat != round(self.avgupdperiod.get()):
