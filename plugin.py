@@ -10,7 +10,7 @@
 #
 
 """
-<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen Modified by:jvdzande" version="1.2.3" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
+<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen Modified by:jvdzande" version="1.2.4" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
     <params>
         <param field="Address" label="Inverter IP Address" width="150px" required="true" />
         <param field="Port" label="Inverter Port Number" width="100px" required="true" default="502" />
@@ -139,18 +139,18 @@ class UpdatePeriod:
 
     def update(self, new_value):
         # Convert string to datetime
-        # current_time = datetime.strptime(new_value, "%Y-%m-%d %H:%M:%S")
+        # input_update_time = datetime.strptime(new_value, "%Y-%m-%d %H:%M:%S")
         updtime = time.strptime(new_value, "%Y-%m-%d %H:%M:%S")
-        current_time = datetime.fromtimestamp(time.mktime(updtime))
+        input_update_time = datetime.fromtimestamp(time.mktime(updtime))
 
         # Check if new_value is the same as the last recorded timestamp
-        if self.last_update_time and current_time == self.last_update_time:
+        if self.last_update_time and input_update_time == self.last_update_time:
             return  # No update needed
 
 
         # If there is a previous timestamp, calculate difference between the p
         if self.prev_update_time is not None:
-            time_diff = (current_time - self.last_update_time).total_seconds()
+            time_diff = (input_update_time - self.last_update_time).total_seconds()
             self.samples.append(time_diff)
 
             # Keep samples within the max limit
@@ -158,7 +158,7 @@ class UpdatePeriod:
                 self.samples.pop(0)
         # Update last timestamp
         self.prev_update_time = self.last_update_time
-        self.last_update_time = current_time
+        self.last_update_time = input_update_time
 
     def get(self):
         if not self.samples:
@@ -325,12 +325,9 @@ class BasePlugin:
         # Sync variables
         self.pstarttime = datetime.now()
         self.SE_LastUpdate = None
+        self.SE_HalfwayHB = False
         self.p1_idx = 0
-        self.p1_Last_Update = None
-        self.p1_Prev_Update = None
         self.p1_HeartBeat = None
-        self.p1_HeartBeat_diffcnt = 0
-        self.p1_delta_diffcnt = 0
         self.avgupdperiod = UpdatePeriod()
         self.avgupdperiod.set_max_samples(5)
 
@@ -771,43 +768,39 @@ class BasePlugin:
 
             return False
 
-        cP1Delta = 0
         upd_SE = False
         # Enough info to determine the P1 Update timing
         if self.avgupdperiod.count() >= 1:
             if not self.p1_HeartBeat:
                 self.displaylog(f"Found update timing of {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ", Log.DSTATUS)
             elif self.p1_HeartBeat != round(self.avgupdperiod.get()):
-                self.displaylog(f"Change update timing of {self.p1_HeartBeat} to {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ", Log.DSTATUS)
+                self.displaylog(f"Change update timing of {self.p1_HeartBeat} to {round(self.avgupdperiod.get())} seconds for P1 {p1_dev_idx} -  {p1_dev_name} ", Log.VERBOSE)
                 self.displaylog(f"P1 Delta {P1Delta} {self.avgupdperiod.count()} {round(self.avgupdperiod.get())}", Log.DEBUG)
 
             self.p1_HeartBeat = round(self.avgupdperiod.get())
-            # Get mod (10->0) when P1_HeartBeat = 10
-            cP1Delta = round(P1Delta % self.p1_HeartBeat)
 
-            # Calculate the "Mid" Update secs as we want to do 2 Hearbeats within the p1_HeartBeat update time
-            cNextHB = round(self.p1_HeartBeat/2 - cP1Delta)
-
-            # calculate the next expected update for P1 and Set the Heartbeat accordingly
-            if cP1Delta >= 2:
-                # Skip SE info update for the mid heartbeat
-                cNextHB = round(self.p1_HeartBeat - cP1Delta)
+            if self.SE_HalfwayHB:
+                # Calculate the remaining Update secs to the next expected p1 update time
+                cNextHB = round(self.p1_HeartBeat - P1Delta)
+                self.SE_HalfwayHB = False
             else:
-                # Update SE info now
+                # Calculate the "Mid" Update secs as we want to do 2 Hearbeats within the p1_HeartBeat update time
+                cNextHB = round(self.p1_HeartBeat/2)
                 upd_SE = True
+                self.SE_HalfwayHB = True
 
             ### Added for checking run #########
             if cNextHB < 1:
-                self.displaylog(f"!!! Use minimal 1 second as Heartbeat   > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}", Log.DEBUG)
+                self.displaylog(f"!!! Use minimal 1 second as Heartbeat   > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat} P1Delta: {P1Delta} lastupdate: {last_update_str}", Log.VERBOSE)
                 cNextHB = 1
 
             if cNextHB > 30:
-                self.displaylog(f"> use max 30 seconds as adviced > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}", Log.DEBUG)
+                self.displaylog(f"> use max 30 seconds as Heartbeat  > upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  P1Delta: {P1Delta} lastupdate: {last_update_str}", Log.VERBOSE)
                 cNextHB = 30
 
             Domoticz.Heartbeat(cNextHB)
 
-            self.displaylog(f"--> upd_SE:{upd_SE} cNextHB: {cNextHB}  avg P1-> {self.p1_HeartBeat}  cdelta:{cP1Delta}<-({P1Delta}) lastupdate: {last_update_str}", Log.DEBUG)
+            self.displaylog(f"--> upd_SE:{upd_SE} cNextHB: {cNextHB}  p1_HeartBeat-> {self.p1_HeartBeat}  P1Delta: {P1Delta} lastupdate: {last_update_str}", Log.DEBUG)
 
         else:
             # still calculating the P1 update interval so use default update interval
@@ -821,7 +814,6 @@ class BasePlugin:
             self.SE_LastUpdate = datetime.now()
 
         return upd_SE
-
 
 #
 # Instantiate the plugin and register the supported callbacks.
