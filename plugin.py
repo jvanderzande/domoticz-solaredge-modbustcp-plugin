@@ -857,7 +857,7 @@ class BasePlugin:
 
             if self.SE_HalfwayHB:
                 # Calculate the remaining Update secs to the next expected p1 update time
-                cNextHB = round(self.p1_HeartBeat - P1Delta)
+                cNextHB = abs(round(self.p1_HeartBeat - P1Delta))
                 self.SE_HalfwayHB = False
             else:
                 # Calculate the "Mid" Update secs as we want to do 2 Hearbeats within the p1_HeartBeat update time
