@@ -225,6 +225,7 @@ class BasePlugin:
 
     def onHeartbeat(self):
         DomoLog(LogLevels.EXTRA, "Entered onHeartbeat()")
+        checktime = datetime.now()
 
         # Calculate the update frequency for P1 idx provided and the Delta after init.
         if int(self.p1_idx) > 0:
@@ -235,6 +236,11 @@ class BasePlugin:
         if self.inverter and self.inverter.connected():
 
             for device_name, device_details in self.device_dictionary.items():
+
+                # Check for slow processing:
+                if (datetime.now() - checktime).total_seconds() > 25:
+                    DomoLog(LogLevels.VERBOSE, "Stopping Cycle as more than 25 seconds are passed.")
+                    return
 
                 if device_details["table"]:
 
@@ -308,6 +314,9 @@ class BasePlugin:
 
                     # Get the value for this unit from the Inverter data
                     value = self.getUnitValue(unit, inverter_data)
+                    if value is None:
+                        DomoLog(LogLevels.EXTRA, "MODBUS value not available in inverter_data = {}".format(table[unit[Column.MODBUSNAME]]))
+                        continue
 
                     # Time to store the value in Domoticz.
                     # Some devices require multiple values, in which case the plugin will combine those values.
@@ -316,6 +325,10 @@ class BasePlugin:
                     if unit[Column.PREPEND_ROW]:
                         DomoLog(LogLevels.DEBUG, "-> has prepend lookup row")
                         prepend = self.getUnitValue(table[unit[Column.PREPEND_ROW]], inverter_data)
+                        if prepend is None:
+                            DomoLog(LogLevels.EXTRA, "PREPEND_ROW not available in inverter_data = {}".format(Column.PREPEND_ROW))
+                            return
+
                         DomoLog(LogLevels.DEBUG, "prepend = {}".format(prepend))
 
                         if unit[Column.PREPEND_MATH]:
@@ -387,6 +400,12 @@ class BasePlugin:
     def getUnitValue(self, row, inverter_data):
 
         DomoLog(LogLevels.DEBUG, "Entered getUnitValue()")
+
+        # check for availability of data to avoid errors
+        try:
+            value = inverter_data[row[Column.MODBUSNAME]]
+        except ValueError:
+            return None
 
         # For certain units the table has a lookup table to replace the value with something else.
         if row[Column.LOOKUP]:
