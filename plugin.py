@@ -320,78 +320,82 @@ class BasePlugin:
                 if (unit[Column.ID] + offset) in Devices:
                     DomoLog(LogLevels.DEBUG, str(unit[Column.ID]) + "-> device available")
 
-                    # Get the value for this unit from the Inverter data
-                    value = self.getUnitValue(unit, inverter_data)
-                    if value is None:
-                        DomoLog(LogLevels.EXTRA, "MODBUS value not available in inverter_data = {}".format(table[unit[Column.MODBUSNAME]]))
-                        continue
+                    # first check whether the array contains: inverter_data[row[Column.MODBUSNAME]]
+                    if not unit[Column.MODBUSNAME] in inverter_data:
+                        DomoLog(LogLevels.VERBOSE, str(unit[Column.MODBUSNAME]) + "-> skipping, Inverter data not available for device")
+                    else:
+                        # Get the value for this unit from the Inverter data
+                        value = self.getUnitValue(unit, inverter_data)
+                        if value is None:
+                            DomoLog(LogLevels.EXTRA, "MODBUS value not available in inverter_data = {}".format(table[unit[Column.MODBUSNAME]]))
+                            continue
 
-                    # Time to store the value in Domoticz.
-                    # Some devices require multiple values, in which case the plugin will combine those values.
-                    # Currently, there is only a need to prepend one value with another.
+                        # Time to store the value in Domoticz.
+                        # Some devices require multiple values, in which case the plugin will combine those values.
+                        # Currently, there is only a need to prepend one value with another.
 
-                    if unit[Column.PREPEND_ROW]:
-                        DomoLog(LogLevels.DEBUG, "-> has prepend lookup row")
-                        prepend = self.getUnitValue(table[unit[Column.PREPEND_ROW]], inverter_data)
-                        if prepend is None:
-                            DomoLog(LogLevels.EXTRA, "PREPEND_ROW not available in inverter_data = {}".format(Column.PREPEND_ROW))
-                            return
+                        if unit[Column.PREPEND_ROW]:
+                            DomoLog(LogLevels.DEBUG, "-> has prepend lookup row")
+                            prepend = self.getUnitValue(table[unit[Column.PREPEND_ROW]], inverter_data)
+                            if prepend is None:
+                                DomoLog(LogLevels.EXTRA, "PREPEND_ROW not available in inverter_data = {}".format(Column.PREPEND_ROW))
+                                return
 
-                        DomoLog(LogLevels.DEBUG, "prepend = {}".format(prepend))
-
-                        if unit[Column.PREPEND_MATH]:
-                            DomoLog(LogLevels.DEBUG, "-> has prepend math")
-                            m = unit[Column.PREPEND_MATH]
-                            prepend = m.get(prepend)
                             DomoLog(LogLevels.DEBUG, "prepend = {}".format(prepend))
 
-                        sValue = unit[Column.FORMAT].format(prepend, value)
+                            if unit[Column.PREPEND_MATH]:
+                                DomoLog(LogLevels.DEBUG, "-> has prepend math")
+                                m = unit[Column.PREPEND_MATH]
+                                prepend = m.get(prepend)
+                                DomoLog(LogLevels.DEBUG, "prepend = {}".format(prepend))
 
-                    elif unit[Column.APPEND_MATH]:
-                        DomoLog(LogLevels.DEBUG, "-> has append math")
-                        m = unit[Column.APPEND_MATH]
-                        append = m.get(0)
-                        DomoLog(LogLevels.DEBUG, "append = {}".format(append))
+                            sValue = unit[Column.FORMAT].format(prepend, value)
 
-                        sValue = unit[Column.FORMAT].format(value, append)
+                        elif unit[Column.APPEND_MATH]:
+                            DomoLog(LogLevels.DEBUG, "-> has append math")
+                            m = unit[Column.APPEND_MATH]
+                            append = m.get(0)
+                            DomoLog(LogLevels.DEBUG, "append = {}".format(append))
 
-                    else:
-                        DomoLog(LogLevels.DEBUG, "-> no prepend")
-                        sValue = unit[Column.FORMAT].format(value)
+                            sValue = unit[Column.FORMAT].format(value, append)
 
-                    # Only store the value in Domoticz when it has changed.
-                    # TODO:
-                    #   We should not store certain values when the inverter is sleeping.
-                    #   That results in a strange graph; it would be better just to skip it then.
-                    nValue=0
+                        else:
+                            DomoLog(LogLevels.DEBUG, "-> no prepend")
+                            sValue = unit[Column.FORMAT].format(value)
 
-                    # Set dimmer to the correct status/Level
-                    if (unit[Column.ID] == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
-                        if value > 0:
-                           nValue = 2
+                        # Only store the value in Domoticz when it has changed.
+                        # TODO:
+                        #   We should not store certain values when the inverter is sleeping.
+                        #   That results in a strange graph; it would be better just to skip it then.
+                        nValue=0
 
-                    # Set Selector switch level to 0;10;20;30 ....
-                    if (unit[Column.ID] == inverters.InverterUnit.STORAGECONTROL ) \
-                    or (unit[Column.ID] == inverters.InverterUnit.RCCMDMODE ):
-                        sValue = unit[Column.FORMAT].format(value*10)
-                        if value > 0:
-                           nValue = 2
+                        # Set dimmer to the correct status/Level
+                        if (unit[Column.ID] == inverters.InverterUnit.ACTIVE_POWER_LIMIT ):
+                            if value > 0:
+                                nValue = 2
 
-                    DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {Column.ID}  offset:{offset}")
+                        # Set Selector switch level to 0;10;20;30 ....
+                        if (unit[Column.ID] == inverters.InverterUnit.STORAGECONTROL ) \
+                        or (unit[Column.ID] == inverters.InverterUnit.RCCMDMODE ):
+                            sValue = unit[Column.FORMAT].format(value*10)
+                            if value > 0:
+                                nValue = 2
 
-                    # Force update when device isn't updated for 12 hours
-                    updtime = time.strptime(Devices[unit[Column.ID] + offset].LastUpdate, "%Y-%m-%d %H:%M:%S")
-                    current_time = datetime.fromtimestamp(time.mktime(updtime))
-                    if (datetime.now() - current_time).total_seconds() > 3600*12:
-                        DomoLog(LogLevels.DEBUG, f">Force update {(datetime.now() - current_time).total_seconds()} device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+                        DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {Column.ID}  offset:{offset}")
 
-                    if (datetime.now() - current_time).total_seconds() > 3600*12 \
-                    or nValue != Devices[unit[Column.ID] + offset].nValue or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
-                        DomoLog(LogLevels.DEBUG, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
-                        Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
-                        updated += 1
+                        # Force update when device isn't updated for 12 hours
+                        updtime = time.strptime(Devices[unit[Column.ID] + offset].LastUpdate, "%Y-%m-%d %H:%M:%S")
+                        current_time = datetime.fromtimestamp(time.mktime(updtime))
+                        if (datetime.now() - current_time).total_seconds() > 3600*12:
+                            DomoLog(LogLevels.DEBUG, f">Force update {(datetime.now() - current_time).total_seconds()} device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
 
-                    device_count += 1
+                        if (datetime.now() - current_time).total_seconds() > 3600*12 \
+                        or nValue != Devices[unit[Column.ID] + offset].nValue or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
+                            DomoLog(LogLevels.DEBUG, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+                            Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
+                            updated += 1
+
+                        device_count += 1
 
                 else:
                     DomoLog(LogLevels.DEBUG, str(unit[Column.ID]) + "-> skipping device not available")
