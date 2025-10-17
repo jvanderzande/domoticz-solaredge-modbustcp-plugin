@@ -255,16 +255,24 @@ class BasePlugin:
 
                     elif device_details["type"] == "meter":
                         try:
-                            meter = self.inverter.meters()[device_name]
-                            values = meter.read_all()
+                            if device_name not in self.inverter.meters():
+                                DomoLog(LogLevels.VERBOSE, f"Meter '{device_name}' not found in inverter.meters()")
+                                values = None
+                            else:
+                                meter = self.inverter.meters()[device_name]
+                                values = meter.read_all()
                         except ConnectionException:
                             values = None
                             DomoLog(LogLevels.NORMAL, "Connection Exception when trying to communicate with: {}:{} Device Address: {}".format(self.inverter_address, self.inverter_port, self.inverter_unit))
 
                     elif device_details["type"] == "battery":
                         try:
-                            battery = self.inverter.batteries()[device_name]
-                            values = battery.read_all()
+                            if device_name not in self.inverter.batteries():
+                                DomoLog(LogLevels.VERBOSE, f"Battery '{device_name}' not found in inverter.batteries()")
+                                values = None
+                            else:
+                                battery = self.inverter.batteries()[device_name]
+                                values = battery.read_all()
                         except ConnectionException:
                             values = None
                             DomoLog(LogLevels.NORMAL, "Connection Exception when trying to communicate with: {}:{} Device Address: {}".format(self.inverter_address, self.inverter_port, self.inverter_unit))
