@@ -9,7 +9,7 @@
 #
 
 """
-<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.5.2" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
+<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.5.3" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
     <params>
         <param field="Address" label="Inverter IP Address" width="150px" required="true" />
         <param field="Port" label="Inverter Port Number" width="150px" required="true" default="502" />
@@ -255,27 +255,43 @@ class BasePlugin:
 
                     elif device_details["type"] == "meter":
                         try:
-                            if device_name not in self.inverter.meters():
+                            meters = self.inverter.meters()  # <-- capture once
+
+                            if device_name not in meters:
                                 DomoLog(LogLevels.VERBOSE, f"Meter '{device_name}' not found in inverter.meters()")
                                 values = None
                             else:
-                                meter = self.inverter.meters()[device_name]
+                                meter = meters[device_name]
                                 values = meter.read_all()
+
                         except ConnectionException:
                             values = None
-                            DomoLog(LogLevels.NORMAL, "Connection Exception when trying to communicate with: {}:{} Device Address: {}".format(self.inverter_address, self.inverter_port, self.inverter_unit))
+                            DomoLog(LogLevels.NORMAL,
+                                    f"Connection Exception when trying to communicate with: {self.inverter_address}:{self.inverter_port} Device Address: {self.inverter_unit}")
+                        except KeyError:
+                            # Safety net if something changes mid-loop
+                            values = None
+                            DomoLog(LogLevels.NORMAL, f"Meter '{device_name}' disappeared unexpectedly during read")
 
                     elif device_details["type"] == "battery":
                         try:
-                            if device_name not in self.inverter.batteries():
-                                DomoLog(LogLevels.VERBOSE, f"Battery '{device_name}' not found in inverter.batteries()")
+                            battery = self.inverter.batteries()  # <-- capture once
+
+                            if device_name not in battery:
+                                DomoLog(LogLevels.VERBOSE, f"battery '{device_name}' not found in inverter.batteries()")
                                 values = None
                             else:
-                                battery = self.inverter.batteries()[device_name]
+                                battery = battery[device_name]
                                 values = battery.read_all()
+
                         except ConnectionException:
                             values = None
-                            DomoLog(LogLevels.NORMAL, "Connection Exception when trying to communicate with: {}:{} Device Address: {}".format(self.inverter_address, self.inverter_port, self.inverter_unit))
+                            DomoLog(LogLevels.NORMAL,
+                                    f"Connection Exception when trying to communicate with: {self.inverter_address}:{self.inverter_port} Device Address: {self.inverter_unit}")
+                        except KeyError:
+                            # Safety net if something changes mid-loop
+                            values = None
+                            DomoLog(LogLevels.NORMAL, f"Meter '{device_name}' disappeared unexpectedly during read")
 
                     if values:
                         DomoLog(LogLevels.EXTRA, "Inverter returned information for {}".format(device_name))
@@ -470,7 +486,7 @@ class BasePlugin:
         subtype = unitrec[Column.SUBTYPE]
         switchtype = unitrec[Column.SWITCHTYPE]
         modbusname = unitrec[Column.MODBUSNAME]
-        DomoLog(LogLevels.VERBOSE,f"onCommand called for Unit:{iUnit} Parameter:'{Command}' Level:{Level}  Unit info-> type:{type} subtype:{subtype} switchtype:{switchtype} modbusname:{modbusname} ")
+        DomoLog(LogLevels.NORMAL,f"onCommand called for Unit:{iUnit} Parameter:'{Command}' Level:{Level}  Unit info-> type:{type} subtype:{subtype} switchtype:{switchtype} modbusname:{modbusname} ")
 
         # Select type:244(xF3)-Light/Switch  subtype:73(x49)-Switch
         if type == 0xF4 and subtype == 0x49:
