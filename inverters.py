@@ -33,6 +33,7 @@ class InverterUnit(IntEnum):
     COSPHI              = 25
     STORAGECONTROL      = 26
     RCCMDMODE           = 27
+    STORAGE_AC_CHARGE_POLICY = 28
 
 SINGLE_PHASE_INVERTER = [
 #   ID,                               NAME,                 TYPE, SUBTYPE, SWITCHTYPE, OPTIONS,             MODBUSNAME,           MODBUSSCALE,            FORMAT,   PREPEND_ROW, PREPEND_MATH, APPEND_MATH, LOOKUP,                               MATH
@@ -55,8 +56,9 @@ SINGLE_PHASE_INVERTER = [
     [InverterUnit.ACTIVE_POWER_LIMIT, "Active Power Limit", 0xF4, 0x49,    0x07,       {},                  "active_power_limit", None,                   "{:.0f}", None,        None,         None,        None,                                 None      , 31],
     [InverterUnit.RRCR_STATE,         "RRCR State",         0xF3, 0x13,    0x00,       {},                  "rrcr_state",         None,                   "{}",     None,        None,         None,        None,                                 None      ],
     [InverterUnit.COSPHI,             "cos-phi",            0xF3, 0x13,    0x00,       {},                  "cosphi",             None,                   "{}",     None,        None,         None,        None,                                 None      ],
-    [InverterUnit.STORAGECONTROL,"Storage Control Mode",0xF4,0x49,0x12,{"LevelActions": "||||"  ,"LevelNames": "Disabled|Maximize Self Consumption|Time of Use|Backup Only|Remote Control","LevelOffHidden": "false","SelectorStyle": "1"} , "storage_control_mode",None,"{}", None,None,None,None,None, 30],
-    [InverterUnit.RCCMDMODE,     "Remote Control Mode", 0xF4,0x49,0x12,{"LevelActions": "||||||","LevelNames": "Off|Charge from excess PV power only|Charge from PV first|Charge from PV and AC|Maximize export|Discharge to match load|Maximize self consumption","LevelOffHidden": "false","SelectorStyle": "1"}, "rc_cmd_mode"         ,None,"{}", None,None,None,None,None, 30]
+    [InverterUnit.STORAGECONTROL,"Storage Control Mode",0xF4,0x49,0x12,{"LevelActions": "||||"  ,"LevelNames": "Disabled|Maximize Self Consumption|Time of Use|Backup Only|Remote Control","LevelOffHidden": "false","SelectorStyle": "1"} , "storage_control_mode",None,"{:.0f}", None,None,None,None,None, 30],
+    [InverterUnit.RCCMDMODE,     "Remote Control Mode", 0xF4,0x49,0x12,{"LevelActions": "|||||||","LevelNames": "Off|Charge from excess PV power only|Charge from PV first|Charge from PV and AC|Maximize export|Discharge to match load|unused|Maximize self consumption","LevelOffHidden": "false","SelectorStyle": "1"}, "rc_cmd_mode"         ,None,"{:.0f}", None,None,None,None,None, 30],
+    [InverterUnit.STORAGE_AC_CHARGE_POLICY, "Storage AC Charge Policy", 0xF4,0x49,0x12, {"LevelNames":"Disabled|Always Allowed|Fixed Energy Limit|Percent of Production","LevelOffHidden":"false","SelectorStyle":"1"}, "storage_ac_charge_policy", None, "{}", None, None, None, None, None]
 ]
 
 THREE_PHASE_INVERTER = [
@@ -86,8 +88,9 @@ THREE_PHASE_INVERTER = [
     [InverterUnit.RRCR_STATE,         "RRCR State",         0xF3, 0x13,    0x00,       {},                  "rrcr_state",         None,                   "{}",     None,        None,         None,        None,                                 None      ],
     [InverterUnit.ACTIVE_POWER_LIMIT, "Active Power Limit", 0xF4, 0x49,    0x07,       {},                  "active_power_limit", None,                   "{:.0f}", None,        None,         None,        None,                                 None     , 31],
     [InverterUnit.COSPHI,             "cos-phi",            0xF3, 0x13,    0x00,       {},                  "cosphi",             None,                   "{}",     None,        None,         None,        None,                                 None      ],
-    [InverterUnit.STORAGECONTROL,"Storage Control Mode",0xF4,0x49,0x12,{"LevelActions": "||||","LevelNames": "Disabled|Maximize Self Consumption|Time of Use|Backup Only|Remote Control","LevelOffHidden": "false","SelectorStyle": "1"}, "storage_control_mode",None,"{}", None,None,None,None,None, 30],
-    [InverterUnit.RCCMDMODE,     "Remote Control Mode", 0xF4,0x49,0x12,{"LevelActions": "||||||","LevelNames": "Off|Charge from excess PV power only|Charge from PV first|Charge from PV and AC|Maximize export|Discharge to match load|Maximize self consumption","LevelOffHidden": "false","SelectorStyle": "1"}, "rc_cmd_mode",None,"{}", None,None,None,None,None, 30]
+    [InverterUnit.STORAGECONTROL,"Storage Control Mode",0xF4,0x49,0x12,{"LevelActions": "||||","LevelNames": "Disabled|Maximize Self Consumption|Time of Use|Backup Only|Remote Control","LevelOffHidden": "false","SelectorStyle": "1"}, "storage_control_mode",None,"{:.0f}", None,None,None,None,None, 30],
+    [InverterUnit.RCCMDMODE,     "Remote Control Mode", 0xF4,0x49,0x12,{"LevelActions": "|||||||","LevelNames": "Off|Charge from excess PV power only|Charge from PV first|Charge from PV and AC|Maximize export|Discharge to match load|NotUsed|Maximize self consumption","LevelOffHidden": "false","SelectorStyle": "1"}, "rc_cmd_mode"         ,None,"{:.0f}", None,None,None,None,None, 30],
+    [InverterUnit.STORAGE_AC_CHARGE_POLICY, "Storage AC Charge Policy", 0xF4, 0x12, 0x00, {"LevelNames":"Disabled|Always Allowed|Fixed Energy Limit|Percent of Production","LevelOffHidden":"false","SelectorStyle":"1"}, "storage_ac_charge_policy", None, "{}", None, None, None, None, None]
 ]
 #
 # This lists all implemented options, but an inverter may not return all of them.

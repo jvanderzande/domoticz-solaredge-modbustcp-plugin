@@ -9,7 +9,7 @@
 #
 
 """
-<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.5.3" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
+<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.5.4" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
     <params>
         <param field="Address" label="Inverter IP Address" width="150px" required="true" />
         <param field="Port" label="Inverter Port Number" width="150px" required="true" default="502" />
@@ -392,7 +392,8 @@ class BasePlugin:
 
                         # Set Selector switch level to 0;10;20;30 ....
                         if (unit[Column.ID] == inverters.InverterUnit.STORAGECONTROL ) \
-                        or (unit[Column.ID] == inverters.InverterUnit.RCCMDMODE ):
+                        or (unit[Column.ID] == inverters.InverterUnit.RCCMDMODE ) \
+                        or (unit[Column.ID] == inverters.InverterUnit.STORAGE_AC_CHARGE_POLICY ):
                             sValue = unit[Column.FORMAT].format(value*10)
                             if value > 0:
                                 nValue = 2
@@ -496,8 +497,17 @@ class BasePlugin:
             # Dimmer x07 / Selector x12 do set level to 0 for Off command
             if (switchtype == 0x07 or switchtype == 0x12) and Command == "Off":
                 Level = 0
-            DomoLog(LogLevels.DSTATUS, f"Send modbusreg:'{modbusname}' Level {Level} to SolarEdge")
-            self.inverter.write(modbusname, Level)
+            # Ensure we pass an integer to the modbus write (pymodbus packers require ints)
+            try:
+                write_value = int(Level)
+            except Exception:
+                try:
+                    write_value = int(float(Level))
+                except Exception:
+                    DomoLog(LogLevels.NORMAL, f"Invalid Level value '{Level}' for writing to {modbusname}")
+                    return
+            DomoLog(LogLevels.DSTATUS, f"Send modbusreg:'{modbusname}' Level {write_value} to SolarEdge")
+            self.inverter.write(modbusname, write_value)
             # update Domoticz immediately
             Devices[iUnit].Update(nValue=2, sValue=str(Level), TimedOut=0)
 
@@ -601,7 +611,7 @@ class BasePlugin:
                             details.update({"table": inverters.OTHER_INVERTER})
 
                         self.device_dictionary["Inverter"] = details
-                        # # Check for Battery conected and Remove Selector Switches when no Battery is detected
+                        # # Check for Battery connected and Remove Selector Switches when no Battery is detected
                         # if "storage_ac_charge_limit" in inverter_values and inverter_values["storage_ac_charge_limit"] == 0.0:
                         #     DomoLog(LogLevels.VERBOSE, "No Battery detected so skipping those options.")
                         #     self.device_dictionary["Inverter"]["table"] = [
