@@ -398,7 +398,7 @@ class BasePlugin:
                             if value > 0:
                                 nValue = 2
 
-                        DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {Column.ID}  offset:{offset}")
+                        DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {unit[Column.ID]}  offset:{offset}")
 
                         # Force update when device isn't updated for 12 hours
                         updtime = time.strptime(Devices[unit[Column.ID] + offset].LastUpdate, "%Y-%m-%d %H:%M:%S")
@@ -407,7 +407,8 @@ class BasePlugin:
                             DomoLog(LogLevels.DEBUG, f">Force update {(datetime.now() - current_time).total_seconds()} device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
 
                         if (datetime.now() - current_time).total_seconds() > 3600*12 \
-                        or nValue != Devices[unit[Column.ID] + offset].nValue or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
+                            or nValue != Devices[unit[Column.ID] + offset].nValue \
+                            or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
                             DomoLog(LogLevels.DEBUG, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
                             Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
                             updated += 1
@@ -478,7 +479,7 @@ class BasePlugin:
         return value
 
     #
-    # Process Device changes made in DOmoticz
+    # Process Device changes made in Domoticz
     #
     def onCommand(self, iUnit, Command, Level, Hue):
         # Set PowerLevel when the dimmer level is changed in Domoticz
@@ -782,7 +783,8 @@ class BasePlugin:
                     if (device.Type != unit[Column.TYPE] or
                         device.SubType != unit[Column.SUBTYPE] or
                         device.SwitchType != unit[Column.SWITCHTYPE] or
-                        device.Options != unit[Column.OPTIONS]):
+                        device.Options != unit[Column.OPTIONS] or
+                        device.Image != unit[Column.CUSTOMEICO]):
 
                         DomoLog(LogLevels.NORMAL, "Updating device \"{}\"".format(device.Name))
 
@@ -795,7 +797,8 @@ class BasePlugin:
                                 Switchtype=unit[Column.SWITCHTYPE],
                                 Options=unit[Column.OPTIONS],
                                 nValue=nValue,
-                                sValue=sValue
+                                sValue=sValue,
+                                Image=unit[Column.CUSTOMEICO]
                         )
 
             # Add missing devices if needed.
@@ -814,13 +817,8 @@ class BasePlugin:
                             "Switchtype": unit[Column.SWITCHTYPE],
                             "Options": unit[Column.OPTIONS],
                             "Used": 1,
+                            "Image": unit[Column.CUSTOMEICO],
                         }
-
-                        try:
-                            device_args["Image"] = unit[Column.CUSTOMEICO]
-                        except:
-                            # ignore when customico not present
-                            pass
 
                         Domoticz.Device(**device_args).Create()
 
