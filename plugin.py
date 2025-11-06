@@ -9,7 +9,7 @@
 #
 
 """
-<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.5.4" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
+<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen   (updated: JvanderZande)" version="2.0.5.5" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
     <params>
         <param field="Address" label="Inverter IP Address" width="150px" required="true" />
         <param field="Port" label="Inverter Port Number" width="150px" required="true" default="502" />
@@ -489,23 +489,23 @@ class BasePlugin:
         switchtype = unitrec[Column.SWITCHTYPE]
         modbusname = unitrec[Column.MODBUSNAME]
         DomoLog(LogLevels.NORMAL,f"onCommand called for Unit:{iUnit} Parameter:'{Command}' Level:{Level}  Unit info-> type:{type} subtype:{subtype} switchtype:{switchtype} modbusname:{modbusname} ")
-
+        seLevel = Level
         # Select type:244(xF3)-Light/Switch  subtype:73(x49)-Switch
         if type == 0xF4 and subtype == 0x49:
             # Use Selector-18(x12) switch level 0;10;20;30 and change that to 0;1;2;3
             if switchtype == 0x12:
-                Level = int(Level/10)
+                seLevel = int(Level/10)
             # Dimmer x07 / Selector x12 do set level to 0 for Off command
             if (switchtype == 0x07 or switchtype == 0x12) and Command == "Off":
-                Level = 0
+                seLevel = 0
             # Ensure we pass an integer to the modbus write (pymodbus packers require ints)
             try:
-                write_value = int(Level)
+                write_value = int(seLevel)
             except Exception:
                 try:
-                    write_value = int(float(Level))
+                    write_value = int(float(seLevel))
                 except Exception:
-                    DomoLog(LogLevels.NORMAL, f"Invalid Level value '{Level}' for writing to {modbusname}")
+                    DomoLog(LogLevels.NORMAL, f"Invalid Level value '{seLevel}' for writing to {modbusname}")
                     return
             DomoLog(LogLevels.DSTATUS, f"Send modbusreg:'{modbusname}' Level {write_value} to SolarEdge")
             self.inverter.write(modbusname, write_value)
