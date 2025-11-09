@@ -28,7 +28,7 @@ def DomoLog(level, message):
     if (LogLevels.DSTATUS == level):
         Domoticz.Status(message)
     elif (LogLevels.DERROR == level):
-        Domoticz.Status(message)
+        Domoticz.Error(message)
     elif (CurrentLogLevel >= level):
         Domoticz.Log(message)
 

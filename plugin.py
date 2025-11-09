@@ -331,8 +331,9 @@ class BasePlugin:
 
             for unit in table:
 
-                # Skip a unit when the matching device got deleted.
+                # EXTRATEST = False
 
+                # Skip a unit when the matching device got deleted.
                 if (unit[Column.ID] + offset) in Devices:
                     DomoLog(LogLevels.DEBUG, str(unit[Column.ID]) + "-> device available")
 
@@ -397,6 +398,7 @@ class BasePlugin:
                             sValue = unit[Column.FORMAT].format(value*10)
                             if value > 0:
                                 nValue = 2
+                            # EXTRATEST = True
 
                         DomoLog(LogLevels.EXTRA, f"update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}  Column.ID: {unit[Column.ID]}  offset:{offset}")
 
@@ -409,9 +411,17 @@ class BasePlugin:
                         if (datetime.now() - current_time).total_seconds() > 3600*12 \
                             or nValue != Devices[unit[Column.ID] + offset].nValue \
                             or (nValue == Devices[unit[Column.ID] + offset].nValue and sValue != Devices[unit[Column.ID] + offset].sValue):
+
+                            # if(EXTRATEST):
+                            #     DomoLog(LogLevels.VERBOSE, f"EXTRATEST:->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+                            # else:
                             DomoLog(LogLevels.DEBUG, f"->update device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
+
                             Devices[unit[Column.ID] + offset].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
                             updated += 1
+                        # else:
+                        #     if(EXTRATEST):
+                        #         DomoLog(LogLevels.VERBOSE, f"EXTRATEST:->Skipped NoChange device: {unit[Column.NAME]}  nValue:{nValue} sValue:{sValue}")
 
                         device_count += 1
 
@@ -508,10 +518,21 @@ class BasePlugin:
                     DomoLog(LogLevels.NORMAL, f"Invalid Level value '{seLevel}' for writing to {modbusname}")
                     return
             DomoLog(LogLevels.DSTATUS, f"Send modbusreg:'{modbusname}' Level {write_value} to SolarEdge")
-            self.inverter.write(modbusname, write_value)
-            # update Domoticz immediately
-            Devices[iUnit].Update(nValue=2, sValue=str(Level), TimedOut=0)
+            try:
+                write_value = int(float(seLevel))
+                self.inverter.write(modbusname, write_value)
+            except Exception as e:
+                DomoLog(LogLevels.DERROR, f"Error writing modbusreg:'{modbusname}' Level {write_value} to SolarEdge. Error: {e}")
+                return
 
+            # Skip Domoticz Update for now and let Get process do the update
+            # # Format the value for Domoticz
+            # sValue = unitrec[Column.FORMAT].format(Level)
+            # nValue = 0
+            # if Level > 0:
+            #     nValue = 2
+            # DomoLog(LogLevels.VERBOSE, f"EXTRATEST ->would update DOMOTCZ device: {iUnit}  nValue:{nValue} sValue:{str(Level)}|{str(sValue)}|")
+            # #EXTRATEST:Devices[iUnit].Update(nValue=nValue, sValue=str(sValue), TimedOut=0)
     #
     # Connect to the inverter and initialize the lookup tables.
     #
