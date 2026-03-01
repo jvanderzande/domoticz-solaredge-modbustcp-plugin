@@ -10,7 +10,7 @@
 #
 
 """
-<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen Modified by:jvdzande" version="1.2.4" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
+<plugin key="SolarEdge_ModbusTCP" name="SolarEdge ModbusTCP" author="Addie Janssen Modified by:jvdzande" version="1.2.4.1" externallink="https://github.com/jvanderzande/domoticz-solaredge-modbustcp-plugin">
     <params>
         <param field="Address" label="Inverter IP Address" width="150px" required="true" />
         <param field="Port" label="Inverter Port Number" width="100px" required="true" default="502" />
@@ -179,6 +179,7 @@ class UpdatePeriod:
 
     def reset(self):
         self.samples.clear()
+        self.prev_update_time = None
         self.last_update_time = None
 
 #
@@ -759,9 +760,14 @@ class BasePlugin:
 
         if P1Delta > 60 and (datetime.now() - self.pstarttime).total_seconds() >= 60:
             if self.p1_HeartBeat:
+                if self.p1_HeartBeat == int(Parameters["Mode2"]):
+                    self.displaylog("P1 device '{}' did not update for 1 minute and we are using default Heartbeat {}".format(p1_dev_name, self.p1_HeartBeat), Log.NORMAL)
+                    return True
                 self.p1_HeartBeat = int(Parameters["Mode2"])
-                self.p1_idx = 0
+                # self.p1_idx = 0
+                self.avgupdperiod.reset()
                 self.displaylog("P1 device '{}' did not update for 1 minute so use default Heartbeat {}".format(p1_dev_name, self.p1_HeartBeat), Log.NORMAL)
+                return True
             else:
                 self.displaylog(f"Skip Sync as P1 not updated last ({ P1Delta }) seconds and restore default update interval." , Log.DSTATUS)
                 Domoticz.Heartbeat(int(Parameters["Mode2"]))
