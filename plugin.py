@@ -494,11 +494,16 @@ class BasePlugin:
     def onCommand(self, iUnit, Command, Level, Hue):
         # Set PowerLevel when the dimmer level is changed in Domoticz
         unitrec = self.GetUnitDefFromID(iUnit)
-        type = unitrec[Column.TYPE]
-        subtype = unitrec[Column.SUBTYPE]
-        switchtype = unitrec[Column.SWITCHTYPE]
-        modbusname = unitrec[Column.MODBUSNAME]
-        DomoLog(LogLevels.NORMAL,f"onCommand called for Unit:{iUnit} Parameter:'{Command}' Level:{Level}  Unit info-> type:{type} subtype:{subtype} switchtype:{switchtype} modbusname:{modbusname} ")
+        if unitrec:
+            type = unitrec[Column.TYPE]
+            subtype = unitrec[Column.SUBTYPE]
+            switchtype = unitrec[Column.SWITCHTYPE]
+            modbusname = unitrec[Column.MODBUSNAME]
+            DomoLog(LogLevels.NORMAL,f"onCommand called for Unit:{iUnit} Parameter:'{Command}' Level:{Level}  Unit info-> type:{type} subtype:{subtype} switchtype:{switchtype} modbusname:{modbusname} ")
+        else:
+            DomoLog(LogLevels.NORMAL,f"onCommand called for Unit:{iUnit} Parameter:'{Command}' Level:{Level}  Unit unknown!!!! ")
+            return
+
         seLevel = Level
         # Select type:244(xF3)-Light/Switch  subtype:73(x49)-Switch
         if type == 0xF4 and subtype == 0x49:
