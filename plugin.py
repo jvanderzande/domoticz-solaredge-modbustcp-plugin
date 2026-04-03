@@ -499,8 +499,25 @@ class BasePlugin:
 
                             elif unit[Column.MODBUSSCALE]:
                                 Domoticz.Debug("-> scaling...")
+
+                                # Fix voltage_dc, which should be UINT16, but I receive negative values.
+                                # So need to correct that with the below function
+                                def to_signed_16(val):
+                                    return val - 65536 if val > 32767 else val
+
+                                SIGNED_FIX_FIELDS = {
+                                    "voltage_dc",
+                                }
+
                                 try:
-                                    value = inverter_values[unit[Column.MODBUSNAME]] * (10 ** inverter_values[unit[Column.MODBUSSCALE]])
+                                    if unit[Column.MODBUSNAME] in SIGNED_FIX_FIELDS:
+                                        raw = inverter_values[unit[Column.MODBUSNAME]]
+                                        raw = to_signed_16(raw)
+                                        scale = to_signed_16(inverter_values[unit[Column.MODBUSSCALE]])
+                                        value = raw * (10 ** scale)
+                                    else:
+                                       value = inverter_values[unit[Column.MODBUSNAME]] * (10 ** inverter_values[unit[Column.MODBUSSCALE]])
+
                                 except KeyError:
                                     missing +=1
                                     self.displaylog("Skipping {} or {} as info is missing in returned modbus data".format(
@@ -761,7 +778,7 @@ class BasePlugin:
         if P1Delta > 60 and (datetime.now() - self.pstarttime).total_seconds() >= 60:
             if self.p1_HeartBeat:
                 if self.p1_HeartBeat == int(Parameters["Mode2"]):
-                    self.displaylog("P1 device '{}' did not update for 1 minute and we are using default Heartbeat {}".format(p1_dev_name, self.p1_HeartBeat), Log.NORMAL)
+                    self.displaylog("P1 device '{}' did not update for 1 minute and we are using default Heartbeat {}".format(p1_dev_name, self.p1_HeartBeat), Log.DEBUG)
                     return True
                 self.p1_HeartBeat = int(Parameters["Mode2"])
                 # self.p1_idx = 0
@@ -769,8 +786,17 @@ class BasePlugin:
                 self.displaylog("P1 device '{}' did not update for 1 minute so use default Heartbeat {}".format(p1_dev_name, self.p1_HeartBeat), Log.NORMAL)
                 return True
             else:
-                self.displaylog(f"Skip Sync as P1 not updated last ({ P1Delta }) seconds and restore default update interval." , Log.DSTATUS)
+                self.p1_HeartBeat = int(Parameters["Mode2"])
                 Domoticz.Heartbeat(int(Parameters["Mode2"]))
+                mtxt = ""
+                if (P1Delta > 3600*24):
+                    mtxt = f"{P1Delta/3600/24:.1f} day(s)"
+                elif (P1Delta > 3600):
+                    mtxt = f"{P1Delta/3600:.1f} hour(s)"
+                else:
+                    mtxt = f"{P1Delta} seconds"
+
+                self.displaylog(f"Skip Sync as last update for P1 was {mtxt} ago, use default update interval {self.p1_HeartBeat}." , Log.DSTATUS)
 
             return False
 
