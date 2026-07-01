@@ -492,6 +492,10 @@ class BasePlugin:
     # Process Device changes made in Domoticz
     #
     def onCommand(self, iUnit, Command, Level, Hue):
+        if not self.inverter.connected():
+            DomoLog(LogLevels.ERROR,f"Not connected to SolarEdge, so skipping onCommand for Unit:{iUnit} Parameter:'{Command}' Level:{Level}  Unit info-> type:{type} subtype:{subtype} switchtype:{switchtype} modbusname:{modbusname} ")
+            return
+
         # Set PowerLevel when the dimmer level is changed in Domoticz
         unitrec = self.GetUnitDefFromID(iUnit)
         if unitrec:
