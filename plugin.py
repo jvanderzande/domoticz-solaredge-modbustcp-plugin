@@ -584,6 +584,10 @@ class BasePlugin:
             self.contactInverter()
 
     def onCommand(self, iUnit, Command, Level, Hue):
+        if not self.inverter.connected():
+            self.displaylog(f"Not connected to SolarEdge, so skipping onCommand for Unit:{iUnit} Parameter:'{Command}' Level:{Level}", Log.DERROR)
+            return
+
         # Set PowerLevel when the dimmer level is changed in Domoticz
         self.displaylog("onCommand called for Unit " + str(iUnit) + ": Parameter '" + str(Command) + "', Level: " + str(Level), Log.VERBOSE)
         if (iUnit == Unit.POWERCONTROL ):
